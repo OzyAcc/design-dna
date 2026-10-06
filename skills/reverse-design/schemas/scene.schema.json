@@ -1,0 +1,364 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "design-dna/scene.schema.json",
+  "title": "Design DNA editable scene model",
+  "type": "object",
+  "required": ["schema_version", "template_id", "revision", "source", "canvas", "tokens", "assets", "nodes", "constraints", "slots", "communication", "locks", "scan", "verification"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "template_id": {"$ref": "#/$defs/id"},
+    "revision": {"type": "integer", "minimum": 0},
+    "base_revision": {"type": ["integer", "null"]},
+    "source": {
+      "type": "object",
+      "required": ["sha256", "path", "canonical"],
+      "properties": {
+        "sha256": {"$ref": "#/$defs/sha"},
+        "path": {"type": "string"},
+        "original_name": {"type": "string"},
+        "metadata": {"type": "object"},
+        "canonical": {
+          "type": "object",
+          "required": ["path", "sha256", "conversion"],
+          "properties": {"path": {"type": "string"}, "sha256": {"$ref": "#/$defs/sha"}, "conversion": {"type": "string"}}
+        }
+      }
+    },
+    "canvas": {
+      "type": "object",
+      "required": ["width", "height", "origin", "units", "color_space", "alpha"],
+      "properties": {
+        "width": {"type": "number", "exclusiveMinimum": 0},
+        "height": {"type": "number", "exclusiveMinimum": 0},
+        "origin": {"const": "top-left"},
+        "units": {"const": "px"},
+        "color_space": {"const": "srgb"},
+        "alpha": {"enum": ["opaque", "transparent"]},
+        "background_composite": {"$ref": "#/$defs/color"},
+        "medium": {"type": "string"},
+        "artwork_bounds": {"$ref": "#/$defs/box"}
+      }
+    },
+    "tokens": {"type": "object", "additionalProperties": {"$ref": "#/$defs/token"}},
+    "assets": {"type": "object", "additionalProperties": {"$ref": "#/$defs/asset"}},
+    "nodes": {"type": "array", "items": {"$ref": "#/$defs/node"}},
+    "constraints": {"type": "array", "items": {"$ref": "#/$defs/constraint"}},
+    "slots": {"type": "array", "items": {"$ref": "#/$defs/slot"}},
+    "communication": {"$ref": "#/$defs/communication"},
+    "locks": {"type": "array", "items": {"$ref": "#/$defs/lock"}},
+    "render_profile": {"type": "object"},
+    "variant": {
+      "type": ["object", "null"],
+      "properties": {"variant_id": {"type": "string"}, "base_revision": {"type": "integer"}, "task": {"type": "string"}}
+    },
+    "scan": {
+      "type": "object",
+      "required": ["state", "coverage"],
+      "properties": {
+        "state": {"enum": ["in_progress", "partial", "complete"]},
+        "coverage": {
+          "type": "object",
+          "propertyNames": {"enum": ["input_canvas", "composition", "element_inventory", "geometry", "color", "typography", "image_treatment", "depth_compositing", "surface_texture", "lighting", "hierarchy_attention", "message_mechanism", "character_theme", "usage_context", "responsive_system", "output_requirements"]},
+          "additionalProperties": {
+            "type": "object",
+            "required": ["status", "note"],
+            "properties": {"status": {"$ref": "#/$defs/status"}, "note": {"type": "string"}, "evidence_ids": {"$ref": "#/$defs/ids"}}
+          }
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "properties": {
+        "tolerances": {
+          "type": "object",
+          "properties": {
+            "anchor_px": {"type": "number"}, "delta_e": {"type": "number"}, "region_ssim": {"type": "number"},
+            "declared_before_iteration": {"type": "boolean"}, "justification": {"type": "string"}
+          }
+        },
+        "expected_text": {"type": "object", "additionalProperties": {"type": "string"}},
+        "reports": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+    "ids": {"type": "array", "items": {"type": "string"}},
+    "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "status": {"enum": ["observed", "measured", "inferred", "unknown", "not_applicable"]},
+    "confidence": {"enum": ["high", "medium", "low", "unassessed"]},
+    "color": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"},
+    "box": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+    "provenance": {
+      "type": "object",
+      "required": ["status", "confidence"],
+      "properties": {
+        "status": {"$ref": "#/$defs/status"},
+        "confidence": {"$ref": "#/$defs/confidence"},
+        "evidence_ids": {"$ref": "#/$defs/ids"},
+        "alternatives": {"type": "array"},
+        "resolving_probe": {"type": ["string", "null"]},
+        "note": {"type": "string"}
+      }
+    },
+    "claim": {
+      "type": "object",
+      "required": ["value", "status", "confidence"],
+      "properties": {
+        "value": {}, "status": {"$ref": "#/$defs/status"}, "confidence": {"$ref": "#/$defs/confidence"},
+        "evidence_ids": {"$ref": "#/$defs/ids"}, "alternatives": {"type": "array"}, "resolving_probe": {"type": ["string", "null"]},
+        "supplied_by_user": {"type": "boolean"}
+      }
+    },
+    "gradient": {
+      "type": "object",
+      "required": ["type", "stops"],
+      "properties": {
+        "type": {"enum": ["linear", "radial"]},
+        "x1": {"type": "number"}, "y1": {"type": "number"}, "x2": {"type": "number"}, "y2": {"type": "number"},
+        "cx": {"type": "number"}, "cy": {"type": "number"}, "r": {"type": "number"},
+        "units": {"enum": ["canvas", "node"]},
+        "interpolation": {"const": "srgb"},
+        "stops": {"type": "array", "minItems": 2, "items": {"type": "object", "required": ["offset", "color"], "properties": {"offset": {"type": "number", "minimum": 0, "maximum": 1}, "color": {"$ref": "#/$defs/color"}}}}
+      }
+    },
+    "paint": {
+      "oneOf": [
+        {"$ref": "#/$defs/color"},
+        {"type": "object", "required": ["token"], "properties": {"token": {"type": "string"}}, "additionalProperties": false},
+        {"$ref": "#/$defs/gradient"},
+        {"type": "null"}
+      ]
+    },
+    "token": {
+      "type": "object",
+      "required": ["type", "value", "status", "confidence"],
+      "properties": {
+        "type": {"enum": ["color", "typography", "spacing", "effect", "material"]},
+        "value": {},
+        "space": {"const": "srgb"},
+        "status": {"$ref": "#/$defs/status"},
+        "confidence": {"$ref": "#/$defs/confidence"},
+        "evidence_ids": {"$ref": "#/$defs/ids"},
+        "samples": {"type": "array", "items": {"$ref": "#/$defs/box"}},
+        "sample_method": {"enum": ["patch_median", "ink_core"]},
+        "note": {"type": "string"}
+      },
+      "if": {"properties": {"type": {"const": "color"}}},
+      "then": {"properties": {"value": {"anyOf": [{"$ref": "#/$defs/color"}, {"$ref": "#/$defs/gradient"}]}}, "required": ["space"]}
+    },
+    "asset": {
+      "type": "object",
+      "required": ["id", "path", "sha256", "kind", "source"],
+      "properties": {
+        "id": {"type": "string"},
+        "path": {"type": "string", "pattern": "^assets/[^/\\\\]+$"},
+        "sha256": {"$ref": "#/$defs/sha"},
+        "kind": {"enum": ["image", "font", "mask", "texture"]},
+        "source": {"enum": ["reference_crop", "supplied", "generated", "synthetic_fixture", "system_font", "source_extraction"]},
+        "width": {"type": "number"}, "height": {"type": "number"}, "format": {"type": ["string", "null"]}, "mode": {"type": "string"},
+        "derived_from": {"type": "object", "properties": {"sha256": {"$ref": "#/$defs/sha"}, "box": {"$ref": "#/$defs/box"}}},
+        "baked_effects": {"type": "array", "items": {"type": "string"}},
+        "font_names": {"type": "object"},
+        "note": {"type": "string"}
+      }
+    },
+    "geometry": {
+      "type": "object",
+      "required": ["x", "y", "w", "h"],
+      "properties": {
+        "x": {"type": "number"}, "y": {"type": "number"}, "w": {"type": "number", "minimum": 0}, "h": {"type": "number", "minimum": 0},
+        "rotation": {"type": "number"},
+        "space": {"const": "canvas"},
+        "bounds": {"enum": ["layout", "ink", "rendered"]},
+        "includes_stroke": {"type": "boolean"}
+      }
+    },
+    "font": {
+      "type": "object",
+      "properties": {
+        "token": {"type": "string"},
+        "asset": {"type": ["string", "null"]},
+        "family": {"type": "string"},
+        "weight": {"type": "number"},
+        "style": {"enum": ["normal", "italic"]},
+        "size": {"type": "number", "exclusiveMinimum": 0},
+        "features": {"type": "object", "additionalProperties": {"type": "integer"}},
+        "variation": {"type": "object", "additionalProperties": {"type": "number"}},
+        "horizontal_scale": {"type": "number"},
+        "synthetic": {"type": "object", "properties": {"bold": {"type": "boolean"}, "italic": {"type": "boolean"}}},
+        "identity": {
+          "type": "object",
+          "required": ["status"],
+          "properties": {
+            "status": {"enum": ["verified", "unknown"]},
+            "candidates": {"type": "array"},
+            "evidence_ids": {"$ref": "#/$defs/ids"},
+            "resolving_probe": {"type": ["string", "null"]}
+          }
+        }
+      }
+    },
+    "fit": {
+      "type": "object",
+      "required": ["policy"],
+      "properties": {"policy": {"enum": ["strict", "fit"]}, "min_size": {"type": "number"}, "max_lines": {"type": "integer", "minimum": 1}}
+    },
+    "placement": {
+      "type": "object",
+      "required": ["fit"],
+      "properties": {
+        "fit": {"enum": ["cover", "contain", "fill", "none"]},
+        "focal": {"type": "array", "items": {"type": "number", "minimum": 0, "maximum": 1}, "minItems": 2, "maxItems": 2},
+        "scale": {"type": "number", "exclusiveMinimum": 0},
+        "crop": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 4, "maxItems": 4}
+      }
+    },
+    "mask": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {"enum": ["rect", "ellipse", "path", "asset"]},
+        "radius": {"type": "number", "minimum": 0},
+        "d": {"type": "string"}, "box": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+        "asset": {"type": "string"}, "mode": {"enum": ["alpha", "luminance"]},
+        "feather": {"type": "number", "minimum": 0}
+      }
+    },
+    "treatment": {
+      "type": "object",
+      "required": ["op"],
+      "properties": {"op": {"type": "string"}, "amount": {"type": "number"}, "color": {"$ref": "#/$defs/color"}}
+    },
+    "effect": {
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": {"type": "string"},
+        "type": {"type": "string"},
+        "enabled": {"type": "boolean"},
+        "kind": {"enum": ["cast", "contact", "glow", "blur"]},
+        "dx": {"type": "number"}, "dy": {"type": "number"},
+        "blur": {"type": "number", "minimum": 0, "description": "Gaussian standard deviation in px"},
+        "spread": {"type": "number", "minimum": 0},
+        "color": {"$ref": "#/$defs/color"},
+        "opacity": {"type": "number", "minimum": 0, "maximum": 1},
+        "blend": {"type": "string"},
+        "receiver": {"type": "string"}
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "type", "role", "geometry"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "alias": {"type": "string"},
+        "type": {"enum": ["group", "text", "image", "shape", "path", "background", "effect"]},
+        "role": {"type": "string"},
+        "parent": {"type": ["string", "null"]},
+        "children": {"$ref": "#/$defs/ids"},
+        "geometry": {"$ref": "#/$defs/geometry"},
+        "transform": {"type": "array", "items": {"type": "number"}, "minItems": 6, "maxItems": 6},
+        "visible": {"type": "boolean"},
+        "opacity": {"type": "number", "minimum": 0, "maximum": 1},
+        "blend": {"enum": ["normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn", "hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity"]},
+        "fill": {"$ref": "#/$defs/paint"},
+        "stroke": {"type": "object", "required": ["color", "width"], "properties": {"color": {"$ref": "#/$defs/paint"}, "width": {"type": "number"}, "align": {"enum": ["center", "inside", "outside"]}}},
+        "shape": {"enum": ["rect", "ellipse"]},
+        "radius": {"type": "number", "minimum": 0},
+        "path": {"type": "string"},
+        "path_box": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+        "content": {"type": "string"},
+        "font": {"$ref": "#/$defs/font"},
+        "align": {"enum": ["left", "center", "right"]},
+        "direction": {"enum": ["ltr", "rtl"]},
+        "lang": {"type": "string"},
+        "first_baseline": {"type": "number"},
+        "line_height": {"type": "number", "exclusiveMinimum": 0},
+        "tracking": {"type": "number", "description": "letter-spacing in px"},
+        "fit": {"$ref": "#/$defs/fit"},
+        "asset": {"type": ["string", "null"]},
+        "placement": {"$ref": "#/$defs/placement"},
+        "mask": {"$ref": "#/$defs/mask"},
+        "treatment": {"type": "array", "items": {"$ref": "#/$defs/treatment"}},
+        "effects": {"type": "array", "items": {"$ref": "#/$defs/effect"}},
+        "effect": {"type": "object", "required": ["kind"], "properties": {"kind": {"type": "string"}}},
+        "editability": {"enum": ["live", "raster", "outlined", "unknown"]},
+        "provenance": {"type": "object", "additionalProperties": {"$ref": "#/$defs/provenance"}},
+        "reflow": {"type": "object", "properties": {"x": {"enum": ["left", "center", "right", "stretch"]}, "y": {"enum": ["top", "center", "bottom", "stretch"]}}}
+      },
+      "allOf": [
+        {"if": {"properties": {"type": {"const": "text"}}}, "then": {"required": ["content", "font", "align", "first_baseline", "line_height"]}},
+        {"if": {"properties": {"type": {"const": "image"}}}, "then": {"required": ["asset", "placement"]}},
+        {"if": {"properties": {"type": {"const": "path"}}}, "then": {"required": ["path", "path_box"]}},
+        {"if": {"properties": {"type": {"const": "group"}}}, "then": {"required": ["children"]}},
+        {"if": {"properties": {"type": {"const": "effect"}}}, "then": {"required": ["effect"]}}
+      ]
+    },
+    "constraint": {
+      "type": "object",
+      "required": ["id", "type", "a", "b"],
+      "properties": {
+        "id": {"type": "string"},
+        "type": {"enum": ["gap", "anchor", "equal", "ratio", "range"]},
+        "a": {"type": "string", "description": "<node>.<edge> where edge in left,right,top,bottom,center_x,center_y,width,height,baseline"},
+        "b": {"type": "string", "description": "<node>.<edge> or canvas.<edge>"},
+        "value": {"type": "number"}, "min": {"type": "number"}, "max": {"type": "number"},
+        "tolerance": {"type": "number"},
+        "priority": {"enum": ["required", "strong", "weak"]},
+        "modes": {"type": "array", "items": {"enum": ["baseline", "adapt", "reflow"]}},
+        "relaxable": {"type": "boolean"},
+        "status": {"$ref": "#/$defs/status"},
+        "note": {"type": "string"}
+      }
+    },
+    "slot": {
+      "type": "object",
+      "required": ["id", "role", "node", "type"],
+      "properties": {
+        "id": {"type": "string"}, "role": {"type": "string"}, "node": {"type": "string"},
+        "type": {"enum": ["text", "image", "color", "logo", "shape"]},
+        "limits": {"type": "object"},
+        "fit": {"enum": ["strict", "fit"]},
+        "treatments_allowed": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "communication": {
+      "type": "object",
+      "required": ["goal", "literal_message", "takeaway", "mechanisms", "hierarchy"],
+      "properties": {
+        "goal": {"$ref": "#/$defs/claim"},
+        "literal_message": {"$ref": "#/$defs/claim"},
+        "takeaway": {"$ref": "#/$defs/claim"},
+        "cta": {"$ref": "#/$defs/claim"},
+        "word_image_relationship": {"$ref": "#/$defs/claim"},
+        "mechanisms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["chain", "status", "confidence"],
+            "properties": {
+              "chain": {"type": "array", "items": {"type": "string"}, "minItems": 4, "maxItems": 4, "description": "visible choice -> likely attention/association -> intended takeaway -> intended action"},
+              "status": {"$ref": "#/$defs/status"}, "confidence": {"$ref": "#/$defs/confidence"},
+              "evidence_ids": {"$ref": "#/$defs/ids"}, "competing": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        "hierarchy": {"type": "object", "required": ["order", "status"], "properties": {"order": {"$ref": "#/$defs/ids"}, "status": {"$ref": "#/$defs/status"}, "note": {"type": "string"}}}
+      }
+    },
+    "lock": {
+      "type": "object",
+      "required": ["id", "target", "kind", "hard"],
+      "properties": {
+        "id": {"type": "string"},
+        "target": {"type": "string", "description": "category (layout|typography|background|content|color|effects) or property path prefix"},
+        "kind": {"enum": ["property", "relationship", "asset", "pixel"]},
+        "hard": {"type": "boolean"},
+        "box": {"$ref": "#/$defs/box"}
+      }
+    }
+  }
+}

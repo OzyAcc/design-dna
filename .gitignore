@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.render/
+.venv/
+venv/
+.pytest_cache/
+# local acceptance runs and template stores
+acceptance-out/
+design-dna-store/
+*.log
+.DS_Store
+Thumbs.db

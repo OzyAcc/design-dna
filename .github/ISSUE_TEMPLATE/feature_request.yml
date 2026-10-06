@@ -1,0 +1,21 @@
+name: Feature / adapter request
+description: A capability Design DNA does not have yet
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you want to scan, rebuild or adapt?
+      placeholder: PDF brochures with embedded fonts; Figma frames; animated stories...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: What evidence would prove it works?
+      description: Features ship with an acceptance demonstration. Describe the input and the check that should pass.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [intake adapter, measurement, typography, rendering, comparison, edits/commands, docs]

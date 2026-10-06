@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "design-dna/evidence.schema.json",
+  "title": "Design DNA evidence store (evidence/evidence.json)",
+  "type": "object",
+  "required": ["schema_version", "template_id", "records"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "template_id": {"type": "string"},
+    "records": {"type": "array", "items": {"$ref": "#/$defs/record"}}
+  },
+  "$defs": {
+    "record": {
+      "type": "object",
+      "required": ["evidence_id", "source_sha256", "method", "tool", "value", "status", "confidence", "justification", "created"],
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {"type": "string", "pattern": "^ev-[a-z0-9][a-z0-9._-]{0,80}$"},
+        "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_state": {"type": "string", "description": "page/frame/state; 'static' for a single still"},
+        "region": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 4, "maxItems": 4, "description": "[x,y,w,h] canonical-image px, top-left origin"},
+        "object": {"type": ["string", "null"], "description": "node id, token key or category the record supports"},
+        "method": {"enum": ["direct_metadata", "pixel_sampling", "ocr", "manual_observation", "source_extraction", "candidate_render_comparison", "inference", "computed_measurement"]},
+        "tool": {"type": "string", "description": "script/tool and version"},
+        "value": {},
+        "units": {"type": ["string", "null"]},
+        "uncertainty": {},
+        "status": {"enum": ["observed", "measured", "inferred", "unknown", "not_applicable"]},
+        "confidence": {"enum": ["high", "medium", "low", "unassessed"]},
+        "justification": {"type": "string", "minLength": 3},
+        "alternatives": {"type": "array"},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "resolving_probe": {"type": ["string", "null"]},
+        "artifacts": {"type": "array", "items": {"type": "string"}, "description": "relative paths of crops/contact sheets"},
+        "created": {"type": "string"}
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+# Design DNA engine dependencies (tested: Pillow 12.2, numpy 2.4, scikit-image 0.26, SciPy 1.18,
+# fontTools 4.63, jsonschema 4.26, Playwright 1.63 on Python 3.12).
+# Renderer: Google Chrome or Microsoft Edge if installed, otherwise `python -m playwright install chromium`.
+pillow>=10.0
+numpy>=1.26
+scikit-image>=0.22
+scipy>=1.11
+fonttools>=4.40
+jsonschema>=4.18
+playwright>=1.40

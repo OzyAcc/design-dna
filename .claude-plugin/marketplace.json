@@ -1,0 +1,20 @@
+{
+  "name": "design-dna",
+  "owner": {
+    "name": "OzyAcc",
+    "url": "https://github.com/OzyAcc"
+  },
+  "metadata": {
+    "description": "Design DNA: evidence-backed design reverse-engineering for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "design-dna",
+      "source": "./",
+      "description": "Scan a visual reference into an editable, verified template and adapt it without drift.",
+      "version": "1.0.0",
+      "license": "MIT",
+      "category": "design"
+    }
+  ]
+}

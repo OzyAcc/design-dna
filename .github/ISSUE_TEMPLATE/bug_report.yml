@@ -1,0 +1,34 @@
+name: Bug report
+description: Something measured, rendered or verified incorrectly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks! Evidence files make bugs reproducible — please attach them.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command you ran and what came back.
+      placeholder: dna.py 'set headline.content = "..."' -> rejected with fit_conflict although the text fits
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Attach report.json / rejected transaction JSON / the reference image if you can share it.
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Output of `python skills/reverse-design/scripts/capabilities.py`
+      render: json
+    validations:
+      required: true

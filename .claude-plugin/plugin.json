@@ -1,0 +1,13 @@
+{
+  "name": "design-dna",
+  "version": "1.0.0",
+  "description": "Reverse-engineer a visual design into an evidence-backed, editable template, rebuild it measurably, and adapt it without drift (skill: reverse-design).",
+  "author": {
+    "name": "OzyAcc",
+    "url": "https://github.com/OzyAcc"
+  },
+  "homepage": "https://github.com/OzyAcc/design-dna",
+  "repository": "https://github.com/OzyAcc/design-dna",
+  "license": "MIT",
+  "keywords": ["design", "reverse-engineering", "templates", "svg", "typography", "arabic", "visual-regression", "claude-skill"]
+}

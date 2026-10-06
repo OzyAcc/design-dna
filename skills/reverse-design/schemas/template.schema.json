@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "design-dna/template.schema.json",
+  "title": "Design DNA template passport (passport.json)",
+  "type": "object",
+  "required": ["schema_version", "id", "name", "name_status", "aliases", "reference", "revision", "readiness", "baseline_match", "editability_coverage", "unresolved", "created", "updated"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+    "name": {"type": "string", "minLength": 1},
+    "name_status": {"enum": ["user_supplied", "suggested", "user_confirmed"]},
+    "aliases": {"type": "array", "items": {"type": "string"}},
+    "fixture": {"type": "boolean", "description": "true for acceptance-test fixtures"},
+    "thumbnail": {"type": ["string", "null"]},
+    "reference": {"type": "object", "required": ["path", "sha256"], "properties": {"path": {"type": "string"}, "sha256": {"type": "string"}, "original_name": {"type": "string"}}},
+    "revision": {"type": "integer"},
+    "readiness": {
+      "enum": ["scan_in_progress", "scanned", "partial_baseline", "editable_close", "exact_pixels"],
+      "description": "Highest matching level the saved baseline actually passed; scan_in_progress/scanned = no verified baseline yet"
+    },
+    "character": {"$ref": "#/$defs/labeled"},
+    "theme": {"$ref": "#/$defs/labeled"},
+    "goal": {"$ref": "#/$defs/labeled"},
+    "literal_message": {"$ref": "#/$defs/labeled"},
+    "takeaway": {"$ref": "#/$defs/labeled"},
+    "mechanism": {"$ref": "#/$defs/labeled"},
+    "medium": {"$ref": "#/$defs/labeled"},
+    "channels": {"$ref": "#/$defs/labeled"},
+    "usage": {"$ref": "#/$defs/labeled"},
+    "unsuitable_for": {"$ref": "#/$defs/labeled"},
+    "audience_assumptions": {"$ref": "#/$defs/labeled"},
+    "visual_signature": {"type": "array", "items": {"type": "string"}},
+    "aspect_ratio": {"type": "string"},
+    "slots": {"type": "array", "items": {"type": "string"}},
+    "constraints_summary": {"type": "array", "items": {"type": "string"}},
+    "editability_coverage": {"type": "object"},
+    "unresolved": {"type": "array", "items": {"type": "string"}},
+    "baseline_match": {
+      "type": "object",
+      "required": ["profile", "status"],
+      "properties": {
+        "profile": {"enum": ["none", "exact_pixels", "editable_close"]},
+        "status": {"enum": ["not_run", "pass", "fail", "incomplete"]},
+        "report": {"type": ["string", "null"]},
+        "how": {"enum": ["copying", "asset_reuse", "editable_rendering", "mixed", null]}
+      }
+    },
+    "brand_association": {"type": ["object", "null"], "description": "Only when the user explicitly supplies it; never inferred"},
+    "created": {"type": "string"},
+    "updated": {"type": "string"}
+  },
+  "$defs": {
+    "labeled": {
+      "type": "object",
+      "required": ["value", "status"],
+      "properties": {
+        "value": {},
+        "status": {"enum": ["user_supplied", "user_confirmed", "suggested", "observed", "inferred", "unknown"]},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

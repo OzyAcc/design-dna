@@ -1,0 +1,55 @@
+name: acceptance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyflakes jsonschema
+      - name: pyflakes
+        run: python -m pyflakes skills/reverse-design/scripts skills/reverse-design/tests
+      - name: schemas are valid JSON Schema 2020-12
+        run: |
+          python - <<'EOF'
+          import json, pathlib, jsonschema
+          for p in pathlib.Path("skills/reverse-design/schemas").glob("*.json"):
+              jsonschema.Draft202012Validator.check_schema(json.loads(p.read_text()))
+              print("ok", p.name)
+          EOF
+
+  acceptance:
+    # The suite uses Windows system fonts (Arial, Georgia, ...) and the preinstalled Chrome.
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      DESIGN_DNA_ACCEPTANCE_DIR: ${{ github.workspace }}\acceptance-out
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements.txt
+      - name: capability report
+        run: python skills/reverse-design/scripts/capabilities.py
+      - name: 14 acceptance demonstrations
+        run: python skills/reverse-design/tests/run_acceptance.py
+      - name: upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-evidence
+          path: acceptance-out/
+          retention-days: 14
