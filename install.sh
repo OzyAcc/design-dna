@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Design DNA installer (macOS / Linux / Git Bash)
 # Copies the skill into ~/.claude/skills/reverse-design, installs Python dependencies, and checks the renderer.
-# An existing installation is moved aside to reverse-design.bak-<timestamp>; nothing is deleted.
+# An existing installation is moved to <store>/backups/reverse-design-<timestamp>; nothing is deleted.
+# (Backups go outside ~/.claude/skills so Claude Code never loads two skills with the same name.)
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 dest="$HOME/.claude/skills/reverse-design"
+store="${DESIGN_DNA_HOME:-$HOME/design-dna}"
 mkdir -p "$HOME/.claude/skills"
 if [ -e "$dest" ]; then
-  bak="$dest.bak-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$store/backups"
+  bak="$store/backups/reverse-design-$(date +%Y%m%d-%H%M%S)"
   mv "$dest" "$bak"
   echo "Existing skill moved to $bak"
 fi

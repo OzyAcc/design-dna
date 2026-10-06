@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "design-dna/bundle.schema.json",
+  "title": "Design DNA portable template bundle manifest (manifest.json inside a .dnab ZIP)",
+  "type": "object",
+  "required": ["schema_version", "bundle_version", "engine", "template_id", "name", "exported_at", "fonts", "variants", "files"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "bundle_version": {"const": "1.0.0"},
+    "engine": {"type": "string"},
+    "template_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+    "name": {"type": "string", "minLength": 1},
+    "aliases": {"type": "array", "items": {"type": "string"}},
+    "readiness": {"type": "string"},
+    "exported_at": {"type": "string"},
+    "render_pin": {"type": ["object", "null"]},
+    "baseline_render": {"type": ["object", "null"]},
+    "fonts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["asset", "sha256", "path", "embedded"],
+        "properties": {
+          "asset": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "path": {"type": "string"}, "embedded": {"type": "boolean"}, "bytes": {"type": ["integer", "null"]},
+          "names": {"type": ["object", "null"]}
+        }
+      }
+    },
+    "variants": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["head", "revisions", "baseline_revision"],
+        "properties": {"name": {"type": "string"}, "head": {"type": "integer"}, "baseline_revision": {"type": "integer"},
+                       "revisions": {"type": "array", "items": {"type": "integer"}}}
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "bytes"],
+        "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "bytes": {"type": "integer"}}
+      }
+    }
+  }
+}

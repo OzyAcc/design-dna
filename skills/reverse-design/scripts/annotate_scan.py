@@ -71,7 +71,15 @@ def main() -> int:
          "![annotated](annotated.png)", "", "## Coverage", "", "| Category | Status | Note |", "|---|---|---|"]
     for c in SCAN_CATEGORIES:
         e = cov.get(c)
-        L.append(f"| {c} | {e['status'] if e else '**MISSING**'} | {(e or {}).get('note', '').replace('|', '/')} |")
+        amb = "; ".join((e or {}).get("ambiguity", []))
+        L.append(f"| {c} | {e['status'] if e else '**MISSING**'} | {(e or {}).get('note', '').replace('|', '/')}"
+                 + (f" — *unresolved: {amb}*" if amb else "") + " |")
+    L += ["", "## Facets (measurement vs hypothesis kept apart)", "",
+          "| facet | status | confidence | finding | evidence | unresolved |", "|---|---|---|---|---|---|"]
+    for c in SCAN_CATEGORIES:
+        for k, f in ((cov.get(c) or {}).get("facets") or {}).items():
+            L.append(f"| {c}.{k} | {f['status']} | {f.get('confidence', '')} | {f.get('note', '').replace('|', '/')} | "
+                     f"{', '.join(f.get('evidence_ids', []))} | {'; '.join(f.get('ambiguity', []))} |")
     L += ["", "## Elements", "", "| id | alias | type | role | x,y,w,h | editability | uncertain |", "|---|---|---|---|---|---|---|"]
     for n in scene["nodes"]:
         g = n["geometry"]

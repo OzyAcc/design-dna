@@ -24,7 +24,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import TOOL_VERSION, add_evidence, read_json, slugify, template_dir  # noqa: E402
 from measure import box_arg  # noqa: E402
-from render_static import capture, launch  # noqa: E402
+from renderer_env import capture, launch  # noqa: E402
 
 STEPS = {"size": [1, 0.25, 0.05], "x": [1, 0.25, 0.05], "baseline": [1, 0.25, 0.05], "tracking": [0.5, 0.1, 0.02]}
 

@@ -1,8 +1,9 @@
-"""Build the README images from an acceptance run (synthetic fixtures only — no third-party artwork).
+"""Build evidence screenshots from an acceptance run (synthetic fixtures only — no third-party artwork).
 
-  python docs/tools/make_images.py <acceptance-run-dir> [--out docs/images]
+  python docs/tools/make_images.py <acceptance-run-dir> [--out docs/images/evidence/latest]
 
 Each image is an HTML page of captioned panels screenshotted with the same Chromium renderer the engine uses.
+README concept illustrations are maintained separately in docs/images/.
 """
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "reverse-design" / "scripts"))
-from render_static import launch  # noqa: E402
+from renderer_env import launch  # noqa: E402
 
 CSS = """
 :root{--ink:#16130f;--muted:#6f675e;--paper:#f6f2ea;--card:#fffdf8;--rule:#ddd4c6;--accent:#c8102e}
@@ -76,14 +77,14 @@ def crop(path, box, out):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("run")
-    ap.add_argument("--out", default=str(ROOT / "docs" / "images"))
+    ap.add_argument("--out", default=str(ROOT / "docs" / "images" / "evidence" / "latest"))
     a = ap.parse_args()
     run, out = Path(a.run), Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     tmp = run / "_readme_parts"  # intermediate crops stay with the run, not in docs/
     tmp.mkdir(exist_ok=True)
     rep = json.loads((run / "report.json").read_text(encoding="utf-8"))
-    res = {r["id"]: r for r in rep["results"]}
+
     scores = json.loads((run / "t01-synthetic-measured" / "scores.json").read_text())
     t14 = json.loads((run / "t14-small-errors" / "results.json").read_text())
     ref = run / "reference" / "reference.png"
@@ -104,7 +105,7 @@ def main() -> int:
             </style><div id="shot"><div class="b"><div style="flex:0 0 600px"><div class="kicker">Claude Code skill · reverse-design</div>
             <div class="wm" style="margin-top:14px">Design<br><em>DNA</em></div>
             <div class="tl">Reverse-engineer a visual design into evidence and an editable model — then adapt it without drift.</div>
-            <div class="flow">scan → measure → model → render → verify</div></div>
+            <div class="flow">scan → measure → model → render → verify<br>acceptance run {rep['run']}: {rep['passed']}/{rep['total']} passed</div></div>
             <div class="strip">
               <div><img src="{b64(ref, 420)}"><div class="lbl">flattened reference</div></div>
               <div><img src="{b64(run / 't02-unfamiliar-flattened' / 'annotated.png', 420)}"><div class="lbl">measured scan</div></div>
@@ -115,11 +116,11 @@ def main() -> int:
         # 2. measured rebuild
         geo = round(max(scores["geometry_max_px"].values()), 2)
         shoot(pw, page("Demonstration 1", "Rebuilt from pixels, scored against hidden ground truth",
-                       f"Every parameter below was measured from the flattened image — frames, baselines, font size and tracking, "
-                       f"shadow offset/blur, photo grading, translucent sheen. Max geometry error {geo}px · head size error "
-                       f"{scores['head_size_pct']:.2f}% · shadow σ error {scores['shadow_sigma_px']:.2f}px · verdict editable_close: "
-                       f"{scores['pixel_verdict']['status'].upper()}.",
-                       [[panel(ref, "reference (flattened)", "the only input the scan saw"),
+                       f"Frames, baselines, font size and tracking, shadow offset/blur, photo grading and translucent sheen were measured "
+                       f"from the flattened image; the original photo, logo and candidate font files were supplied. Max geometry error "
+                       f"{geo}px · head size error {scores['head_size_pct']:.2f}% · shadow σ error {scores['shadow_sigma_px']:.2f}px · "
+                       f"verdict editable_close: {scores['pixel_verdict']['status'].upper()}.",
+                       [[panel(ref, "reference (flattened)", "measured input; photo, logo and fonts supplied separately"),
                          panel(rebuilt, "editable rebuild", "live text · masked image · editable shadow"),
                          panel(t01 / "compare" / "diff_heatmap.png", "absolute difference ×4", "declared scaling; black = identical",
                                ("pass", "EDITABLE_CLOSE PASS") if scores["pixel_verdict"]["status"] == "pass" else ("fail", "FAIL"))]]),
@@ -141,7 +142,7 @@ def main() -> int:
                          panel(run / "t09-reflow-9x16" / "reflow-1080x1920.png", "reflow canvas=1080x1920", "reading order preserved", ("pass", "REFLOW_PRESERVE PASS"))]],
                        width=1400), out / "demo-arabic-reflow.png")
         # 5. honest scan
-        sheet = sorted((run / "store" / "templates").glob("product-grid-six-up*/evidence/fonts/candidates-*.png"))[0]
+        sheet = sorted(run.glob("store*/templates/product-grid-six-up*/evidence/fonts/candidates-*.png"))[0]  # T20 moves the store
         shoot(pw, page("Demonstration 2", "An unfamiliar flattened JPEG — uncertainty kept, not hidden",
                        "Grid, gutters, radius and baselines are measured; captions are rendered with the best candidate font, but the "
                        "font's identity stays unknown and the caption regions are reported as failing instead of being blurred into a score.",

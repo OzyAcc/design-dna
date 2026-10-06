@@ -46,6 +46,11 @@
       }
     },
     "brand_association": {"type": ["object", "null"], "description": "Only when the user explicitly supplies it; never inferred"},
+    "render_pin": {"type": ["object", "null"], "description": "renderer environment pinned when the baseline was approved (renderer_env.make_pin)"},
+    "baseline_render": {"type": ["object", "null"], "required": ["path", "sha256", "revision", "scene_sha256"],
+                        "description": "the approved baseline render adaptations are verified against"},
+    "render_migrations": {"type": "array", "description": "confirmed renderer migrations: old pin, new pin, pixel differences"},
+    "imports": {"type": "array", "description": "bundle imports that produced or updated this template"},
     "created": {"type": "string"},
     "updated": {"type": "string"}
   },

@@ -49,12 +49,24 @@ def decode(path, bg=(255, 255, 255)):
     return np.asarray(im.convert("RGB")), pol
 
 
+def decode_rgba(path):
+    """Decoded RGBA after EXIF orientation and ICC->sRGB, no compositing (alpha is data, not a background)."""
+    im = Image.open(path)
+    im.load()
+    im = ImageOps.exif_transpose(im)
+    icc = im.info.get("icc_profile")
+    if icc:
+        mode = "RGBA" if "A" in im.mode else "RGB"
+        im = ImageCms.profileToProfile(im.convert(mode), ImageCms.ImageCmsProfile(io.BytesIO(icc)), ImageCms.createProfile("sRGB"), outputMode=mode)
+    return np.asarray(im.convert("RGBA"))
+
+
 def pixel_metrics(a, b) -> dict:
     d = np.abs(a.astype(np.int16) - b.astype(np.int16))
     unequal = int(np.count_nonzero(d.max(axis=2)))
     return {"unequal_pixels": unequal, "unequal_fraction": unequal / (a.shape[0] * a.shape[1]),
             "max_channel_error": int(d.max()), "mae": float(d.mean()), "rmse": float(np.sqrt((d.astype(np.float64) ** 2).mean())),
-            "range": "0-255 per channel, RGB"}
+            "range": f"0-255 per channel, {'RGBA' if a.shape[-1] == 4 else 'RGB'}"}
 
 
 def ssim(a, b):
@@ -141,6 +153,8 @@ def regions_from_scene(scene, render_report=None) -> list[dict]:
         if n["type"] in ("background", "group") or not n.get("visible", True):
             continue
         rb = (bounds.get(n["id"]) or {}).get("rendered")
+        if bounds and not rb:
+            continue  # reported as an unknown region by compare()
         g = n["geometry"]
         box = rb or [g["x"], g["y"], g["w"], g["h"]]
         kind = "image" if n["type"] == "image" else ("text" if n["type"] == "text" else n.get("role", n["type"]))
@@ -164,9 +178,12 @@ def compare(ref_path, out_path, out_dir, scene=None, render_report=None, profile
         return rep
     H, W = ref.shape[:2]
     rep["checks"]["dimensions"] = {"status": "pass", "size": [W, H]}
-    pm = pixel_metrics(ref, out)
-    rep["checks"]["exact_pixels"] = dict(pm, status="pass" if pm["unequal_pixels"] == 0 else "fail", achieved_by=how)
-    rep["checks"]["pixel_error"] = dict(mae=pm["mae"], rmse=pm["rmse"], status="info")
+    pm = pixel_metrics(decode_rgba(ref_path), decode_rgba(out_path))  # identity includes alpha
+    ap = pixel_metrics(ref, out)
+    rep["checks"]["exact_pixels"] = dict(pm, status="pass" if pm["unequal_pixels"] == 0 else "fail", achieved_by=how,
+                                         claim="decoded RGBA identity (no matte)")
+    rep["checks"]["appearance"] = dict(ap, status="info", claim=f"appearance after compositing over rgb{bg}")
+    rep["checks"]["pixel_error"] = dict(mae=ap["mae"], rmse=ap["rmse"], status="info")
     g, gset = ssim(ref, out)
     rep["checks"]["ssim_global"] = {"value": g, "settings": gset, "status": "info",
                                     "note": "global SSIM is not used for a verdict; large blank areas can hide local errors"}
@@ -183,6 +200,11 @@ def compare(ref_path, out_path, out_dir, scene=None, render_report=None, profile
         return rep
     # region checks (text/logo/hero/shapes separately so blank space cannot hide them)
     regions, geo, reg = regions_from_scene(scene, render_report), {}, {}
+    if render_report and render_report.get("bounds"):
+        for n in scene["nodes"]:
+            b = render_report["bounds"].get(n["id"])
+            if n["type"] not in ("background", "group") and n.get("visible", True) and (not b or not b.get("rendered")):
+                reg[n["id"]] = {"status": "unknown", "reason": "element has no rendered footprint to compare"}
     for r in regions:
         b = clip_box(r["box"], W, H)
         if b is None:
@@ -240,7 +262,7 @@ def compare(ref_path, out_path, out_dir, scene=None, render_report=None, profile
             typo[n["id"]] = {"status": "pass" if same else "fail", "content_identical": same,
                              "line_breaks": [exp.count("\n") + 1, n["content"].count("\n") + 1], "font_identity": ident}
     rep["checks"]["typography"] = typo
-    rep["checks"]["editability"] = {"status": "unknown" if editability is None else
+    rep["checks"]["editability"] = {"status": "unknown" if editability is None or editability["overall"] == "incomplete" else
                                     ("pass" if editability["overall"] == "pass" else "fail"), "detail": editability}
     rep["checks"]["communication"] = {"status": "unknown", "note": "interpretive; see passport/communication hypotheses"}
     rep["unknown"].append("communication (interpretive, cannot be measured from pixels)")
@@ -261,15 +283,18 @@ def _verdict(rep, profile) -> dict:
     items.append(("editability", c.get("editability", {}).get("status", "unknown")))
     fails = [k for k, s in items if s == "fail"]
     unknown = [k for k, s in items if s == "unknown"]
-    st = "fail" if fails or c["dimensions"]["status"] == "fail" else ("incomplete" if unknown else "pass")
-    return {"profile": profile, "status": st, "failed": fails, "unknown": unknown + rep["unknown"],
-            "note": "a tolerance pass is not 100% identity"}
+    # missing evidence is never a pass: no compared regions, missing samples or transcription -> incomplete
+    blocking = unknown + [u for u in rep["unknown"] if not u.startswith("communication")]
+    if not c.get("regions"):
+        blocking.append("regions: nothing was compared (empty inventory)")
+    st = "fail" if fails or c["dimensions"]["status"] == "fail" else ("incomplete" if blocking else "pass")
+    return {"profile": profile, "status": st, "failed": fails, "unknown": unknown + rep["unknown"], "blocking_unknowns": blocking,
+            "note": "a tolerance pass is not 100% identity; communication stays interpretive and does not block a visual profile"}
 
 
 def outside_influence(base_png, var_png, influence_boxes, W, H) -> dict:
     """adapt_preserve pixel check: pixels outside the pre-declared influence must be identical."""
-    a, _ = decode(base_png)
-    b, _ = decode(var_png)
+    a, b = decode_rgba(base_png), decode_rgba(var_png)
     mask = np.zeros((H, W), bool)
     for box in influence_boxes:
         cb = clip_box(box, W, H)

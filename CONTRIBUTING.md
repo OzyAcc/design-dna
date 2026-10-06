@@ -25,12 +25,13 @@ python skills/reverse-design/scripts/capabilities.py
 
 ```bash
 python -m pyflakes skills/reverse-design/scripts skills/reverse-design/tests
-python skills/reverse-design/tests/run_acceptance.py          # ~15 min, Windows (system fonts)
+python skills/reverse-design/tests/run_acceptance.py          # ~30 min, Windows (system fonts)
 python skills/reverse-design/tests/run_acceptance.py --only 4,6   # a subset while iterating
 ```
 
-The acceptance report (`report.md`) must stay at 14/14. If you add a capability, add a demonstration that
-exercises it with retained inputs and outputs, and list it in `references/adapters.md`.
+Every acceptance check in `report.md` must pass. Entries marked `unverified` stay unverified until a real test
+replaces them. If you add a capability, add a demonstration that exercises it and keeps its inputs and outputs.
+List the capability in `references/adapters.md` and `CAPABILITIES.md`.
 
 ## Adding an adapter (PDF, layered source, UI, motion …)
 

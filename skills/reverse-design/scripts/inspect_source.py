@@ -35,7 +35,7 @@ def read_metadata(path: Path) -> dict:
         alpha_used = False
         if alpha:
             alpha_used = bool(np.asarray(im.convert("RGBA"))[:, :, 3].min() < 255)
-        meta = {"format": im.format, "width": im.width, "height": im.height, "mode": im.mode,
+        meta = {"format": im.format, "width": im.width, "height": im.height, "header_note": "width/height = raw file header (before EXIF orientation)", "mode": im.mode,
                 "has_alpha_channel": alpha, "alpha_used": alpha_used,
                 "icc_profile": ImageCms.getProfileDescription(ImageCms.ImageCmsProfile(io.BytesIO(icc))).strip() if icc else None,
                 "exif_orientation": exif.get(0x0112), "dpi": im.info.get("dpi"), "frames": getattr(im, "n_frames", 1),
@@ -49,6 +49,10 @@ def read_metadata(path: Path) -> dict:
     g = math.gcd(meta["width"], meta["height"])
     meta["aspect_ratio"] = f"{meta['width'] // g}:{meta['height'] // g}"
     return meta
+
+
+def meta_size(meta):
+    return meta["oriented_width"], meta["oriented_height"]
 
 
 def canonical_copy(path: Path, out: Path) -> str:
@@ -111,6 +115,10 @@ def create_template(src: Path, name: str, name_status: str, tid: str | None = No
     meta = read_metadata(tdir / rel)
     canon = tdir / "source" / "canonical.png"
     conversion = canonical_copy(tdir / rel, canon)
+    with Image.open(canon) as im:  # the working canvas is the orientation-normalised image, not the raw header
+        meta["oriented_width"], meta["oriented_height"] = im.size
+    g = math.gcd(*meta_size(meta))
+    meta["aspect_ratio"] = f"{meta['oriented_width'] // g}:{meta['oriented_height'] // g}"
     with Image.open(canon) as im:
         im.thumbnail((320, 320))
         im.save(tdir / "source" / "thumb.png")
@@ -130,7 +138,7 @@ def create_template(src: Path, name: str, name_status: str, tid: str | None = No
          "status": "inferred", "confidence": "low", "justification": "corner-color heuristic; does not prove absence of surrounding UI",
          "resolving_probe": "confirm whether the image is the artwork itself or a screenshot containing it"},
     ])
-    W, H = meta["width"], meta["height"]
+    W, H = meta["oriented_width"], meta["oriented_height"]
     scene = {
         "schema_version": SCHEMA_VERSION, "template_id": tid, "revision": 0, "base_revision": None,
         "source": {"sha256": digest, "path": rel, "original_name": src.name, "metadata": meta,

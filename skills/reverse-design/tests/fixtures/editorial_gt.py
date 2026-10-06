@@ -11,7 +11,7 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
-from common import import_asset, read_json, template_dir, write_json  # noqa: E402
+from common import add_evidence, import_asset, read_json, template_dir, write_json  # noqa: E402
 from inspect_source import create_template  # noqa: E402
 
 FONTS = Path("C:/Windows/Fonts")
@@ -83,22 +83,67 @@ def gt_scene(scene, tdir, fx: Path) -> dict:
                         "competing": ["the red CTA could pull first attention on a small phone screen"]}],
         "hierarchy": {"order": ["n-headline", "n-hero", "n-cta-pill", "n-label", "n-logo"], "status": "inferred"}}
     scene["verification"]["expected_text"] = {n["id"]: n["content"] for n in scene["nodes"] if n["type"] == "text"}
-    scene["scan"] = {"state": "complete", "coverage": {c: {"status": "observed", "note": "known by construction"} for c in (
-        "input_canvas", "composition", "element_inventory", "geometry", "color", "typography", "image_treatment",
-        "depth_compositing", "hierarchy_attention", "message_mechanism", "character_theme", "usage_context", "output_requirements")}}
-    scene["scan"]["coverage"].update({"surface_texture": {"status": "not_applicable", "note": "flat paper, no texture"},
-                                      "lighting": {"status": "observed", "note": "single top light implied by shadow dy=18"},
-                                      "responsive_system": {"status": "not_applicable", "note": "single static format"}})
+    scene["scan"] = {"state": "complete", "coverage": layered_coverage("ev-layered-source")}
     return scene
+
+
+def layered_coverage(ev):
+    """Complete 16-category coverage with facets for a source whose layers are known (construction manifest)."""
+    o = lambda note: {"status": "observed", "note": note, "evidence_ids": [ev], "confidence": "high"}
+    i = lambda note, conf="medium": {"status": "inferred", "note": note, "confidence": conf}
+    f = lambda **kw: {k: (v if isinstance(v, dict) else o(v)) for k, v in kw.items()}
+    return {
+        "input_canvas": o("1080x1350 sRGB PNG rendered from the layered source"),
+        "composition": dict(o("single column on paper, 80px side margin, centred hero"), facets=f(
+            grid="single column", spacing="label->headline gap 42px; hero 18px below headline box", alignment="left edge x=80; hero centred",
+            whitespace="generous paper margins top and bottom")),
+        "element_inventory": o("background, accent bar, label, headline, hero image, CTA pill + text, translucent sheen, logo"),
+        "geometry": dict(o("all node boxes known"), facets=f(position_size="every node", radii_strokes="hero radius 32, pill radius 48, no strokes",
+                                                             transforms="none")),
+        "color": dict(o("five role tokens"), facets=f(role_tokens="paper, accent, text primary/secondary, cta text",
+                                                       gradients="only inside the photo asset", opacity_blending="sheen = white at 0.35")),
+        "typography": dict(o("two pinned font files"), facets=f(
+            text="3 live strings", font_candidates="the source names its files", font_identity="verified: source manifest names the file hashes",
+            size_line_height="headline 84/96, label 28/34, CTA 34/44", tracking="label 4px, others 0", baselines_alignment="left; CTA centred",
+            direction="ltr")),
+        "image_treatment": dict(o("supplied product photo"), facets=f(images="bag.png (supplied original)", crop_intent="cover, focal 0.5/0.55",
+                                                                       masks="rounded rect r=32", treatment="saturate 0.85 then contrast 1.08")),
+        "depth_compositing": dict(o("8 layers in document order"), facets=f(layering="document order", shadows="hero cast shadow dy 18, blur 22, multiply",
+                                                                            blend_modes="multiply shadow; normal elsewhere")),
+        "surface_texture": dict(o("flat paper colour"), facets=f(textures="none in the layout; photo texture is inside the asset")),
+        "lighting": i("single soft top light implied by the shadow offset"),
+        "hierarchy_attention": i("headline -> hero -> CTA (hypothesis, not eye tracking)"),
+        "message_mechanism": dict(o("brief supplied with the source: launch a premium everyday bag"),
+                                  facets={"message_delivery": i("promise headline + product as evidence + red CTA")}),
+        "character_theme": i("quiet editorial premium"),
+        "usage_context": o("brief: social feed product launch, 4:5"),
+        "responsive_system": {"status": "not_applicable", "note": "single static format by construction"},
+        "output_requirements": o("1080x1350 PNG, sRGB"),
+    }
+
+
+def passport_fields():
+    s = lambda v, st="suggested": {"value": v, "status": st}
+    return dict(character=s("quiet editorial premium"), theme=s("everyday luxury accessories"), goal=s("launch a premium everyday handbag", "user_supplied"),
+                literal_message=s("Carry the quiet confidence. Shop the edit.", "observed"),
+                takeaway=s("premium without shouting", "inferred"),
+                mechanism=s("large serif promise -> product shown as evidence -> single red call to action", "inferred"),
+                channels=s(["instagram feed 4:5", "facebook feed"]), usage=s("single-product launches, seasonal edits"),
+                unsuitable_for=s("multi-product range overviews, price-led promotions"), medium=s("social feed post", "user_supplied"),
+                visual_signature=["paper ground", "serif two-line headline", "rounded photo with soft shadow", "red pill CTA"])
 
 
 def build_gt(fx: Path) -> str:
     r = create_template(fx / "blank_1080x1350.png", "Synthetic Layered Source", "user_supplied", tid="fixture-layered-source")
     tid = r["template_id"]
     tdir = template_dir(tid)
+    add_evidence(tdir, [{"evidence_id": "ev-layered-source", "source_sha256": read_json(tdir / "scene.json")["source"]["sha256"],
+                         "region": None, "object": "all", "method": "source_extraction", "tool": "editorial_gt.py construction manifest",
+                         "value": "every layer, font file, asset and parameter is defined by the fixture code", "status": "observed",
+                         "confidence": "high", "justification": "layered source: values are known by construction, not measured"}])
     scene = gt_scene(read_json(tdir / "scene.json"), tdir, fx)
     write_json(tdir / "scene.json", scene)
     p = read_json(tdir / "passport.json")
-    p.update(fixture=True, readiness="scanned", unresolved=[])
+    p.update(fixture=True, readiness="scanned", unresolved=[], **passport_fields())
     write_json(tdir / "passport.json", p)
     return tid

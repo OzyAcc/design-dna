@@ -43,10 +43,13 @@ def rebuild() -> list[dict]:
 def resolve_template(ref: str) -> dict:
     """Exact (case-insensitive) match on id, name or alias. Ambiguity is an error, never a guess."""
     r = ref.strip().lower()
-    hits = [t for t in rebuild() if r == t["id"] or r == t["name"].lower() or r in [a.lower() for a in t["aliases"]]]
+    rows = rebuild()
+    by_id = [t for t in rows if r == t["id"]]  # ids are unique: an exact id always wins
+    hits = by_id or [t for t in rows if r == t["name"].lower() or r in [a.lower() for a in t["aliases"]]]
     if len(hits) != 1:
-        raise DnaError(f"{len(hits)} templates match {ref!r}", "unknown_template" if not hits else "ambiguous_target",
-                       {"candidates": [h["name"] for h in hits]})
+        raise DnaError(f"{len(hits)} templates match {ref!r}" + ("; use one of the ids" if hits else ""),
+                       "unknown_template" if not hits else "ambiguous_target",
+                       {"candidates": [{"id": h["id"], "name": h["name"]} for h in hits]})
     return hits[0]
 
 

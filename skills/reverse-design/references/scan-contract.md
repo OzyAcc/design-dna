@@ -1,8 +1,32 @@
 # Scan contract
 
 Every category gets a result: `observed`, `measured`, `inferred`, `unknown` or `not_applicable`, stored in
-`scene.scan.coverage.<category>` with a note and evidence ids. A skipped category is not a pass. `validate_model.py`
-errors when `scan.state = complete` and a category is missing.
+`scene.scan.coverage.<category>` with a note, evidence ids, a confidence and `ambiguity` (unresolved alternatives).
+A skipped category is not a pass. When `scan.state = complete`, `validate_model.py` **errors** on:
+
+- a missing category, or a missing required **facet** (below) unless the category is `not_applicable`;
+- an `observed`/`measured` finding with no evidence id (every fact needs a source);
+- an `inferred` finding with no confidence;
+- a communication category (`hierarchy_attention`, `message_mechanism`, `character_theme`, `usage_context`)
+  marked `measured`. Visual measurements and communication hypotheses stay separate.
+
+Required facets (each `{status, note, evidence_ids, confidence, ambiguity}`):
+
+| Category | Facets |
+|---|---|
+| composition | grid, spacing, alignment, whitespace |
+| geometry | position_size, radii_strokes, transforms |
+| typography | text, font_candidates, font_identity, size_line_height, tracking, baselines_alignment, direction |
+| color | role_tokens, gradients, opacity_blending |
+| image_treatment | images, crop_intent, masks, treatment |
+| depth_compositing | layering, shadows, blend_modes |
+| surface_texture | textures |
+| message_mechanism | message_delivery |
+
+`font_identity` stays `unknown` unless source evidence names the file hash, because a matching candidate is not
+proof of identity. The template passport must also answer name, character, goal, theme, suitable uses, message and
+how the design delivers that message. Each answer is labelled `user_supplied`, `observed`, `suggested` or
+`inferred`, and `validate_model.py` reports any gaps.
 
 ## Contents
 1. Categories and tools

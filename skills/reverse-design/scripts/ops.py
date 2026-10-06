@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from common import DnaError, deep, diff_paths, find_node, import_asset, node_map, resolve
+from common import DnaError, deep, diff_paths, find_node, import_asset, node_map, resolve  # noqa: F401
 from validate_model import _walk_refs, resolved_font
 
 COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$")
@@ -23,6 +23,8 @@ def adopt_asset(scene, rec) -> dict:
 
 
 def change(path, before, after, kind="requested", why=""):
+    """kind: requested (asked for) | dependency (a model change the request implies) |
+    visual (pixels change, model does not: e.g. token-bound fills) | note (information only, authorises nothing)."""
     return {"path": path, "before": before, "after": after, "kind": kind, "why": why}
 
 
@@ -48,26 +50,52 @@ def lock_prefix(scene, target: str):
     return f"nodes.{n['id']}" + (f".{rest}" if rest else "")
 
 
-def lock_covers(scene, lock, path, node) -> bool:
+WHOLE_NODE_CATEGORIES = {  # categories that a node's removal/replacement as a whole falls under
+    "layout": lambda n: True, "typography": lambda n: n["type"] == "text", "background": lambda n: n["type"] == "background",
+    "content": lambda n: n["type"] in ("text", "image", "background"), "color": lambda n: bool(n.get("fill") or n.get("stroke")),
+    "effects": lambda n: bool(n.get("effects") or n.get("treatment")),
+}
+
+
+def lock_covers(scene, lock, path, node, alt_scene=None) -> bool:
+    """True when `path` equals the locked path, lies under it, or is an ANCESTOR of it (the object holding the
+    locked property was replaced or removed). Categories are evaluated for whole-node changes too."""
     t = lock["target"]
     if t in LOCK_CATEGORIES:
+        if node is not None and re.fullmatch(r"nodes\.[^.]+", path):
+            return WHOLE_NODE_CATEGORIES[t](node)
         return LOCK_CATEGORIES[t](path, node)
-    pre = lock_prefix(scene, t)
-    return path == pre or path.startswith(pre + ".")
+    try:
+        pre = lock_prefix(scene, t)
+    except DnaError:
+        if alt_scene is None:
+            raise
+        pre = lock_prefix(alt_scene, t)  # the locked node may exist only in the other state (removed / added)
+    return path == pre or path.startswith(pre + ".") or pre.startswith(path + ".")
 
 
-def check_locks(scene, changes) -> tuple[list, list]:
-    """Hard locks block (conflict). Soft locks yield to explicit requested edits (recorded as overrides)."""
-    nodes, conflicts, overrides = node_map(scene), [], []
-    for c in changes:
-        m = re.match(r"nodes\.([^.]+)", c["path"])
-        node = nodes.get(m.group(1)) if m else None
-        for lk in scene["locks"]:
-            if lock_covers(scene, lk, c["path"], node):
-                rec = {"lock": lk["id"], "target": lk["target"], "path": c["path"], "kind": c["kind"]}
+def check_locks(before, after, changes) -> tuple[list, list]:
+    """Locks are enforced on the ACTUAL before/after leaf differences, not on what the ops declared, so replacing a
+    parent object or deleting a node cannot slip past a lock. Hard locks conflict; soft locks yield only to a
+    requested edit (recorded as override). Locks in effect = those of the candidate (an explicit unlock in the
+    same patch is an explicit authorisation)."""
+    nb, na = node_map(before), node_map(after)
+    requested = {c["path"] for c in changes if c["kind"] == "requested"}
+    actual = [p for p in diff_paths(before, after) if p.split(".")[0] not in ("locks", "assets", "revision", "base_revision",
+                                                                                 "variant", "render_profile")]
+    conflicts, overrides = [], []
+    for p in actual:
+        m = re.match(r"nodes\.([^.]+)", p)
+        node = (na.get(m.group(1)) or nb.get(m.group(1))) if m else None
+        kind = "requested" if any(p == r or p.startswith(r + ".") or r.startswith(p + ".") for r in requested) else "dependency"
+        for lk in after["locks"]:
+            if lk["kind"] == "pixel":  # pixel locks are verified on the render (verify_change.py)
+                continue
+            if lock_covers(after, lk, p, node, before):
+                rec = {"lock": lk["id"], "target": lk["target"], "path": p, "kind": kind}
                 if lk["hard"]:
                     conflicts.append(dict(rec, resolve=f"unlock {lk['target']} (or narrow the lock) to allow this change"))
-                elif c["kind"] == "requested":
+                elif kind == "requested":
                     overrides.append(rec)
                 else:
                     conflicts.append(dict(rec, resolve="dependency would change a soft-locked property; authorize it explicitly"))
@@ -109,7 +137,10 @@ def eval_constraint(scene, c) -> dict:
     return {"id": c["id"], "ok": ok, "actual": round(actual, 3), "expected": c.get("value", [c.get("min"), c.get("max")])}
 
 
-def check_constraints(before, after, mode, relax=()) -> tuple[list, list]:
+def check_constraints(before, after, mode, relax=(), requested_nodes=()) -> tuple[list, list]:
+    """Newly broken constraints conflict, except (a) ids listed in `relax`, and (b) relaxable measured relationships
+    that involve a node the user explicitly edited -- the request overrides the measurement, and the relaxation is
+    reported with before/after values. Non-relaxable (required) constraints always conflict."""
     conflicts, notes = [], []
     for c in after["constraints"]:
         if c.get("modes") and mode not in c["modes"]:
@@ -124,8 +155,11 @@ def check_constraints(before, after, mode, relax=()) -> tuple[list, list]:
         if not was["ok"]:
             notes.append({"constraint": c["id"], "note": "already unsatisfied before this patch", **was})
         elif not now_["ok"]:
-            if c["id"] in relax and c.get("relaxable", False):
-                notes.append({"constraint": c["id"], "note": "relaxed by request", **now_})
+            touched = {ref.rsplit(".", 1)[0] for ref in (c["a"], c["b"])} & set(requested_nodes)
+            if c.get("relaxable", False) and (c["id"] in relax or touched):
+                notes.append({"constraint": c["id"], "relaxed": True, "before": was["actual"], "after": now_["actual"],
+                              "note": "relaxed by an explicit edit of " + ", ".join(sorted(touched)) if touched else "relaxed by request",
+                              **now_})
             else:
                 conflicts.append({"constraint": c["id"], "a": c["a"], "b": c["b"], "type": c["type"], **now_,
                                   "resolve": "change the request, move the related node too, or relax this constraint"
@@ -160,7 +194,7 @@ def op_set(scene, op, tdir):
             for field in ("fill", "stroke", "font"):
                 if key in _walk_refs(n.get(field), "token"):
                     out.append(change(f"nodes.{n['id']}.{field}", f"token:{key}", f"token:{key}",
-                                      "dependency", "bound to the edited token"))
+                                      "visual", "bound to the edited token"))
     return out
 
 
@@ -207,7 +241,7 @@ def op_replace(scene, op, tdir):
     old = scene["assets"].get(before) or {}
     if old.get("width") and abs(old["width"] / old["height"] - rec["width"] / rec["height"]) > 0.01:
         out.append(change(f"nodes.{n['id']}.placement", "aspect " + f"{old['width'] / old['height']:.3f}",
-                          "aspect " + f"{rec['width'] / rec['height']:.3f}", "dependency",
+                          "aspect " + f"{rec['width'] / rec['height']:.3f}", "note",
                           "new asset aspect differs; fit/focal anchor kept, visible crop changes (no deformation)"))
     baked = set(rec.get("baked_effects", []))
     live = [fx for fx in n.get("effects", []) if fx["type"] == "drop_shadow" and fx.get("enabled", True)]
@@ -249,10 +283,16 @@ def op_add(scene, op, tdir):
 
 
 def op_lock(scene, op, tdir):
-    if op["target"] not in LOCK_CATEGORIES:
+    kind = op.get("kind", "property")
+    if kind == "pixel":
+        if not op.get("box") or len(op["box"]) != 4:
+            raise DnaError("a pixel lock needs a box [x, y, w, h]", "bad_lock")
+    elif op["target"] not in LOCK_CATEGORIES:
         lock_prefix(scene, op["target"])  # validates the target
     lid = f"lock-{len(scene['locks']) + 1}-{re.sub(r'[^a-z0-9]+', '-', op['target'].lower())}"[:60]
-    lk = {"id": lid, "target": op["target"], "kind": op.get("kind", "property"), "hard": op.get("hard", True)}
+    lk = {"id": lid, "target": op["target"], "kind": kind, "hard": op.get("hard", True)}
+    if kind == "pixel":
+        lk["box"] = op["box"]
     scene["locks"].append(lk)
     return [change(f"locks.{lid}", None, lk)]
 

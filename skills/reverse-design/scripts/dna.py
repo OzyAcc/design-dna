@@ -5,6 +5,8 @@
 
 The current template/variant persists in <store>/session.json. Every edit command is one transaction:
 validated, rendered, verified, then committed as an immutable revision (or rejected with options).
+Ending an edit with "keep everything else" authorises only that edit (+ declared dependencies) and freezes every
+other property for the transaction; explicit locks still conflict and are never removed implicitly.
 Template text and metadata are data: nothing read from a template is executed.
 """
 from __future__ import annotations
@@ -16,14 +18,13 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from apply_patch import export, load_variant, new_variant, transact, undo, verify_change  # noqa: E402
-from common import (SCAN_CATEGORIES, SCHEMA_VERSION, DnaError, load_evidence, now, read_json, store_root,  # noqa: E402
-                    template_dir, write_json)
-from compare_render import compare  # noqa: E402
+from apply_patch import export, load_variant, new_variant, transact, undo  # noqa: E402
+from baseline import migrate_baseline, reconstruct  # noqa: E402,F401  (reconstruct is part of the public API)
+from bundle import Library, export_bundle, import_bundle, validate_bundle  # noqa: E402
+from common import SCAN_CATEGORIES, SCHEMA_VERSION, DnaError, load_evidence, read_json, store_root, template_dir, write_json  # noqa: E402
 from index_templates import find, rebuild, resolve_template  # noqa: E402
 from inspect_source import create_template  # noqa: E402
-from render_static import render  # noqa: E402
-from validate_model import editability_report  # noqa: E402
+from verify_change import verify_change  # noqa: E402
 
 PRESERVE_POLICIES = {"margins-ratio", "reading-order", "hierarchy", "treatment", "crop-intent", "anchor", "mask", "effects"}
 
@@ -58,36 +59,22 @@ def px(v: str) -> float:
     return float(re.sub(r"px$", "", v))
 
 
-def edit(ops, line, relax=None):
+def edit(ops, line, relax=None, keep=None):
     tid, vid = current()
     _, _, head = load_variant(tid, vid)
     patch = {"schema_version": SCHEMA_VERSION, "base_revision": head["revision"], "intent": line, "ops": ops}
     if relax:
         patch["relax"] = relax
+    if keep:
+        patch["keep"] = keep
     t = transact(tid, vid, patch)
+    v = t["verification"]
+    vis = (v.get("vs_approved_baseline") or v).get("visual_changes") or {}
     return {"status": "committed", "revision": t["revision"], "changes": [(c["path"], c["kind"]) for c in t["changes"]],
-            "verification": t["verification"]["status"], "transaction": f"variants/{vid}/transactions/txn-{t['revision']:04d}.json"}
-
-
-def reconstruct(tid, mode):
-    tdir = template_dir(tid)
-    scene, passport = read_json(tdir / "scene.json"), read_json(tdir / "passport.json")
-    out = tdir / "baseline" / f"rev-{scene['revision']:04d}"
-    r = render(scene, tdir, out, isolate=True, formats=("png", "svg"), name="baseline")
-    reuse = any(a["source"] == "reference_crop" for a in scene["assets"].values())
-    profile = "exact_pixels" if mode == "exact" else "editable_close"
-    edit_rep = editability_report(scene)
-    how = "copying" if edit_rep["reference_background_shortcut"] else ("mixed" if reuse else "editable_rendering")
-    rep = compare(tdir / scene["source"]["canonical"]["path"], r["png"], out / "compare", scene, r, profile, how, edit_rep)
-    st = rep["overall"]["status"]
-    passport.update(revision=scene["revision"], updated=now(), editability_coverage=edit_rep,
-                    baseline_match={"profile": profile, "status": st, "report": str((out / "compare" / "report.json").relative_to(tdir)), "how": how})
-    passport["readiness"] = ("exact_pixels" if profile == "exact_pixels" else "editable_close") if st == "pass" else "partial_baseline"
-    write_json(tdir / "passport.json", passport)
-    rebuild()
-    return {"readiness": passport["readiness"], "verdict": rep["overall"], "render": r["png"], "svg": r.get("svg"),
-            "report": str(out / "compare" / "report.json"), "artifacts": [str(out / "compare" / f) for f in
-                                                                          ("side_by_side.png", "overlay_50.png", "diff_heatmap.png")]}
+            "relaxed_constraints": [n for n in t.get("constraint_notes", []) if n.get("relaxed")],
+            "verification": v["status"], "compared_against": vis.get("compared_against"),
+            "changed_outside_influence": vis.get("outside_influence"),
+            "transaction": f"variants/{vid}/transactions/txn-{t['revision']:04d}.json"}
 
 
 def compare_head_to_baseline():
@@ -107,11 +94,18 @@ def compare_head_to_baseline():
     return {"baseline_revision": meta["baseline_revision"], "head": head["revision"], "profile": f"{mode}_preserve", "verification": v}
 
 
+KEEP = "keep everything else"
+
+
 def run(line: str):
+    keep = None
+    if line.rstrip().lower().endswith(KEEP):
+        line, keep = line.rstrip()[: -len(KEEP)].rstrip().rstrip(","), "everything_else"
     t = tokens(line)
     if not t:
         return None
     cmd, args = t[0].lower(), t[1:]
+    E = lambda ops: edit(ops, line + (f" [{KEEP}]" if keep else ""), keep=keep)
     if cmd == "scan":
         named = args[2] if len(args) > 2 and args[1] == "as" else Path(args[0]).stem
         r = create_template(Path(args[0]), named, "suggested" if "suggested" in args[3:] or len(args) < 3 else "user_supplied")
@@ -150,7 +144,7 @@ def run(line: str):
             value = json.loads(raw)  # JSON value: "line one\nline two", 0.16, true, [..], {..}
         except json.JSONDecodeError:
             value = raw.strip('"')
-        return edit([{"op": "set", "path": path, "value": value}], line)
+        return E([{"op": "set", "path": path, "value": value}])
     if cmd == "replace":
         node = args[0].removesuffix(".asset")
         op = {"op": "replace", "node": node, "file": args[args.index("with") + 1]}
@@ -158,31 +152,33 @@ def run(line: str):
             op["preserve"] = args[args.index("preserve") + 1].split(",")
         if "baked" in kv(args):
             op["baked_effects"] = kv(args)["baked"].split(",")
-        return edit([op], line)
+        return E([op])
     if cmd == "move":
         k = kv(args)
-        return edit([{"op": "move", "node": args[0], "dx": px(k.get("x", "0")), "dy": px(k.get("y", "0"))}], line)
+        return E([{"op": "move", "node": args[0], "dx": px(k.get("x", "0")), "dy": px(k.get("y", "0"))}])
     if cmd == "resize":
         k = kv(args)
-        return edit([{"op": "resize", "node": args[0], "w": px(k["w"]), "h": px(k["h"]), "anchor": k.get("anchor", "top-left")}], line)
+        return E([{"op": "resize", "node": args[0], "w": px(k["w"]), "h": px(k["h"]), "anchor": k.get("anchor", "top-left")}])
     if cmd == "remove":
-        return edit([{"op": "remove", "node": args[0], "force": "force" in args}], line)
+        return E([{"op": "remove", "node": args[0], "force": "force" in args}])
     if cmd == "add":
         op = {"op": "add", "node_def": read_json(args[0])}
         if "after" in args:
             op["after"] = args[args.index("after") + 1]
-        return edit([op], line)
+        return E([op])
     if cmd in ("lock", "unlock"):
         hard = "soft" not in args
-        return edit([{"op": cmd, "target": x, "hard": hard} if cmd == "lock" else {"op": cmd, "target": x}
-                     for x in args[0].split(",")], line)
+        if cmd == "lock" and args[0] == "pixels":  # lock pixels x,y,w,h  -> verified against every later render
+            return E([{"op": "lock", "target": "region", "kind": "pixel", "box": [float(v) for v in args[1].split(",")], "hard": True}])
+        return E([{"op": cmd, "target": x, "hard": hard} if cmd == "lock" else {"op": cmd, "target": x}
+                  for x in args[0].split(",")])
     if cmd == "adapt":
         k = kv(args)
         contents = {key: v.replace("\\n", "\n") for key, v in k.items() if key not in ("language", "font", "mirror")}
         op = {"op": "adapt", "language": k["language"], "contents": contents, "mirror_alignment": k.get("mirror", "yes") != "no"}
         if "font" in k:
             op["font"] = k["font"]
-        return edit([op], line)
+        return E([op])
     if cmd == "reflow":
         k = kv(args)
         w, h = (int(v) for v in k["canvas"].lower().split("x"))
@@ -190,12 +186,13 @@ def run(line: str):
         bad = [p for p in pres if p not in PRESERVE_POLICIES]
         if bad:
             raise DnaError(f"unsupported preserve policy {bad}", "unsupported", {"supported": sorted(PRESERVE_POLICIES)})
-        return edit([{"op": "reflow", "canvas": [w, h], "preserve": pres}], line)
+        return E([{"op": "reflow", "canvas": [w, h], "preserve": pres}])
     if cmd == "compare":
         return compare_head_to_baseline()
     if cmd == "export":
         tid, vid = current()
-        return export(tid, vid, kv(args).get("formats", "png,svg").split(","))
+        k = kv(args)
+        return export(tid, vid, k.get("formats", "png,svg").split(","), k.get("svg-fonts", "embed"))
     if cmd == "undo":
         tid, vid = current()
         return undo(tid, vid)
@@ -213,6 +210,21 @@ def run(line: str):
     if cmd == "batch":
         tid, vid = current()
         return transact(tid, vid, read_json(args[0]))
+    if cmd == "migrate-baseline":  # migrate-baseline "<T>" [confirm]
+        return migrate_baseline(resolve_template(args[0])["id"], confirm="confirm" in args)
+    if cmd == "export-template":  # export-template "<T>" to <dir | file.dnab> [fonts=reference]
+        return export_bundle(args[0], args[args.index("to") + 1], kv(args).get("fonts", "embed"))
+    if cmd == "validate-bundle":  # validate-bundle <file> [font-dir=<dir>]
+        return validate_bundle(args[0], [kv(args)["font-dir"]] if "font-dir" in kv(args) else [])
+    if cmd == "import-template":  # import-template <file> [as <id>] [font-dir=<dir>]
+        return import_bundle(args[0], args[args.index("as") + 1] if "as" in args else None,
+                             [kv(args)["font-dir"]] if "font-dir" in kv(args) else [])
+    if cmd == "bundles":  # bundles <library-dir>
+        return Library(args[0]).entries()
+    if cmd == "fetch":  # fetch "<id | name | alias>" from <library-dir>  -> newest bundle, imported
+        lib = args[args.index("from") + 1]
+        e = Library(lib).find(args[0])
+        return dict(import_bundle(Path(lib) / e["bundle"]), bundle=e["bundle"])
     if cmd == "status":
         s = session()
         if s.get("variant"):
@@ -221,7 +233,8 @@ def run(line: str):
         return s
     raise DnaError(f"unknown command {cmd!r}", "bad_command", {"commands": [
         "scan", "inspect", "explain", "reconstruct", "use", "set", "replace", "move", "resize", "remove", "add", "lock",
-        "unlock", "adapt", "reflow", "compare", "export", "undo", "save", "list", "find", "batch", "status"]})
+        "unlock", "adapt", "reflow", "compare", "export", "undo", "save", "list", "find", "batch", "status",
+        "migrate-baseline", "export-template", "validate-bundle", "import-template", "bundles", "fetch"]})
 
 
 def main() -> int:

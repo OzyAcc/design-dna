@@ -1,6 +1,8 @@
 # Design DNA — build report
 
-**Version 1.0.0 · 6 October 2026 · status: 14/14 acceptance demonstrations passing (Chrome 154, Windows 10)**
+**Version 2.0.0 · 6 October 2026 · status: 32/32 acceptance checks passing, 1 unverified (Chrome 154 / Edge 154, Windows 10)**
+
+Sections 3–8 describe the 1.0.0 build. Section 2 records what 2.0.0 changed, why, and how it was verified.
 
 This report records what was built from the Design DNA specification ([SPEC.md](SPEC.md)), how it was verified,
 what broke during verification and how it was fixed, and what remains unsupported. It is written for people who
@@ -9,13 +11,14 @@ want to trust — or challenge — the engine's claims.
 ## Contents
 
 1. Summary
-2. What was built
-3. How it was verified
-4. Results
-5. Engineering log: failures found by acceptance and their fixes
-6. Specification compliance
-7. Known limitations
-8. Reproducing everything
+2. Version 2.0.0
+3. What was built (1.0.0)
+4. How it was verified
+5. Results (1.0.0 run)
+6. Engineering log: failures found by acceptance and their fixes (1.0.0)
+7. Specification compliance
+8. Known limitations
+9. Reproducing everything
 
 ---
 
@@ -26,12 +29,72 @@ deterministic renderer, compares the rebuild with the reference region by region
 verified transactions. Every stored value carries a status (`observed | measured | inferred | unknown |
 not_applicable`) and points at the evidence that produced it.
 
-The headline result: given only a flattened image of a layered poster, the engine recovered its frames, text
-baselines, font sizes, letter tracking, drop-shadow offset and blur, photo grading and a translucent overlay to
-**sub-pixel / sub-percent accuracy**, while still refusing to claim the font's identity — and the rebuild passed the
-`editable_close` pixel profile.
+The headline result: from a flattened PNG of a layered poster, plus the supplied original product photo, vector
+logo and candidate font files, the engine measured the frames, text baselines, font sizes, letter tracking,
+drop-shadow offset and blur, photo grading and a translucent overlay. It reached **sub-pixel / sub-percent
+accuracy** and still refused to claim the font's identity. The rebuild passed the `editable_close` pixel profile,
+and since 2.0.0 the test asserts that verdict.
 
-## 2. What was built
+## 2. Version 2.0.0
+
+2.0.0 answers two inputs:
+
+- **A v2 specification.** Make the package complete and reviewable/adaptable for other agent hosts. It asked for
+  portable persistent templates, an enforced renderer pin, a "keep everything else" that cannot drift, an SVG
+  export that states and verifies its contents, complete scan evidence, and adaptation checks against the approved
+  baseline.
+- **An independent repository audit of 1.0.0** with eight findings (F1–F8) and three additional corrections.
+  Every finding is fixed and has a regression check: [AUDIT-RESPONSE.md](AUDIT-RESPONSE.md).
+
+### New and rebuilt modules
+
+| Script | Responsibility |
+|---|---|
+| `renderer_env.py` | browser launch, the environment fingerprint, `make_pin` / `compare_pin` (hard fields stop work, soft fields are reported) |
+| `baseline.py` | `reconstruct`: approve + pin the first baseline per model content; re-runs prove reproducibility. `migrate_baseline`: preview, then explicit confirm |
+| `svg_export.py` | element classification, self-contained SVG + manifest, round-trip verification of the exported file |
+| `verify_change.py` | cache keyed by scene + tool + renderer and re-verified on hit; model-change report (requested / dependency / visual / note); mask-accurate visual-change report; checks against the previous revision and the approved baseline |
+| `bundle.py` | `.dnab` export / validate / import, font embed or reference-by-hash, `StorageBackend` + `FilesystemBackend`, library lookup |
+| `ops.py`, `apply_patch.py` | locks on actual leaf diffs (ancestors, removals, both states); pixel locks; keep-everything-else scope; reported constraint relaxation; rejected-transaction records |
+| `compare_render.py` | RGBA identity vs composited appearance; regions without a footprint are `unknown`; missing evidence → `incomplete` |
+| `validate_model.py` | required facets, sourced facts, interpretive categories never `measured`, passport completeness, composition-level editability (crop assemblies, baked content), slot limits |
+| `render_static.py` | CSS/XML-escaped serialization, compiled-SVG allowlist, network blocking, text stroke, immutable outputs, per-node alpha masks |
+
+### Engineering log (2.0.0)
+
+| Symptom | Root cause | Fix |
+|---|---|---|
+| "Move the headline up 3 px, keep everything else" was rejected | a measured `gap` constraint between headline and accent bar changed, as the request implies | relaxable constraints touching an explicitly edited node are relaxed and **reported** (`relaxed_constraints`); hard constraints still conflict |
+| A second edit's verification looked clean while the template had already drifted | each commit was compared only with its parent revision | cumulative check against the approved template baseline (matched by model content hash) on every commit |
+| A refactor dropped a loop header in the region comparison | editing error caught by T01/T14 failing | restored; covered by the existing region assertions |
+| Headless capture flake (`Unable to capture screenshot`) under heavy load | Chromium capture timing | bounded retry kept; renders are re-verified by hash anyway |
+| The installer's backup of an old skill sat next to it in `~/.claude/skills` | two folders with the same skill name would both load | backups go to `~/design-dna/backups/` |
+| The first full 2.0 run: T08/T09 crashed | tests still read the 1.0 render key `variant`, and the reflow probe compared images of different sizes | tests use `candidate`; requested-edit probes on a resized canvas check the rendered footprint and leave the layout verdict to `reflow_preserve`; the cumulative pixel check is `not_applicable` once a variant was reflowed (model changes are still checked) |
+| T12: a missing asset file was not reported | the facet check reused the variable that held missing assets, so the report always returned an empty list | renamed; the error and the `missing_assets` status agree again |
+| T01: `editable_close` came back `incomplete` | the operator scan defined no replaceable slots, and since the F1 fix a model without slots cannot claim editability | the scan now records its six slots, as a complete scan must |
+| T26/T32 crashed with "3 templates match" | after T20/T21 imported copies under new ids, name lookup was (correctly) ambiguous | an exact template id always wins; ambiguity errors list the ids; the regressions address the template by id |
+
+### Results (2.0.0)
+
+Final run `20261006-234454`: **32/32 passed, 1 entry unverified by design**. Renderer: Chrome 154.0.8037.93
+(Edge 154 for the drift test), Python 3.12.10, Windows 10. Evidence screenshots:
+[images/evidence/v2.0.0](images/evidence/v2.0.0/).
+
+| Kind | Checks | Result |
+|---|---|---|
+| Reconstruction | T01 — measured rebuild, `editable_close` asserted: max geometry error 0.46 px, head size 0.006 %, shadow σ 0.93 px | pass |
+| Honest partial result | T02 — the other rasterizer's captions (Bahnschrift, not a candidate) fail and are reported; best substitute Tahoma Bold | pass |
+| Preservation | T04, T05, T06, T15, T18, T19 | pass |
+| Expected rejection | T07, T12, T13, T14, T16, T17 | pass |
+| Adaptation / reflow / determinism / persistence | T08, T09, T10, T11 | pass |
+| Portability | T20 — bundle round-trip after the working store was moved away | pass |
+| Renderer integrity | T21 — a real Chrome → Edge switch is refused as drift until migrated; both Chromium 154 builds produced 0 differing pixels | pass |
+| Export integrity | T22 — self-contained SVG (1.6 MB) rendered on its own and compared | pass |
+| Audit regressions | T24–T33 | pass |
+| Unverified integration | T23 — host storage adapter (no host available) | unverified |
+
+
+## 3. What was built (1.0.0)
 
 ### Skill and packaging
 | Item | Purpose |
@@ -65,7 +128,7 @@ baselines, font sizes, letter tracking, drop-shadow offset and blur, photo gradi
 Deterministic fixtures (procedural product photos, a vector logo, a known layered poster, a flattened 6-up JPEG
 grid drawn by a different rasterizer), the 14 demonstrations, per-test evidence folders and a Markdown/JSON report.
 
-## 3. How it was verified
+## 4. How it was verified
 
 - Every demonstration runs for real in an isolated template store and keeps its inputs and outputs.
 - Demonstrations 1 and 2 are **operator-assisted scans**: the operator (Claude) proposes coarse regions and reads
@@ -74,7 +137,7 @@ grid drawn by a different rasterizer), the 14 demonstrations, per-test evidence 
 - Reference and rebuild are compared as decoded pixels under a declared policy (no resizing, blurring or alignment).
 - The suite runs on Windows in CI (lint + schema check on Ubuntu).
 
-## 4. Results
+## 5. Results (1.0.0 run)
 
 Final run `20261006-205635`: **14/14 passed**, renderer Chrome 154.0.8037.93, Python 3.12, Windows 10.
 
@@ -120,7 +183,7 @@ Final run `20261006-205635`: **14/14 passed**, renderer Chrome 154.0.8037.93, Py
 | 13 | Full-reference background + invisible live text: pixels can match, but editability fails and readiness never reaches `editable_close` |
 | 14 | `SALE → SOLE` at global SSIM 0.9994 and a 3 px logo shift at 0.9987: both **fail** on region, content and geometry checks |
 
-## 5. Engineering log: failures found by acceptance and their fixes
+## 6. Engineering log: failures found by acceptance and their fixes (1.0.0)
 
 Acceptance tests were written before being trusted; most of them failed at least once. The failures were real
 defects, and each fix made the engine more honest or more accurate:
@@ -144,7 +207,7 @@ defects, and each fix made the engine more honest or more accurate:
 | Intermittent "Unable to capture screenshot" | headless Chromium capture flake | bounded retry around screenshots |
 | A planned undo test edit was rejected | the hard `layout` lock from the previous test covered it | correct behaviour; the test was changed, not the lock |
 
-## 6. Specification compliance
+## 7. Specification compliance
 
 | Spec section | Status | Notes |
 |---|---|---|
@@ -157,12 +220,12 @@ defects, and each fix made the engine more honest or more accurate:
 | 2 Communication contract | Implemented | four-step chains with status, competing readings |
 | 3 Evidence, scene model, passport, index | Implemented | variants stored as directories of immutable revisions rather than an inline `variants` array |
 | 4 Workflow A–F | Implemented | segmentation is assisted (Claude proposes, tools measure) |
-| 5 Commands + mandatory edit behaviour | Implemented / partial | all commands; property locks enforced; **pixel-region locks exist in the schema but are not enforced yet** — pixel preservation is verified through the declared influence region |
+| 5 Commands + mandatory edit behaviour | Implemented | all commands; property, category and pixel-region locks enforced (2.0.0); "keep everything else" is an allowed-change scope |
 | 6 Reconstruction and rendering | Implemented for static flat graphics | other adapters return `unsupported`; generation/inpainting is not part of the engine |
-| 7 Verification and acceptance | Implemented | metric panel, four profiles, 14 demonstrations; the correction loop is operator-driven (iterations recorded in measurement logs) |
-| 8 Architecture | Implemented | schema version 1.0.0 (no migrations needed yet), stable ids, immutable baselines, content-hashed assets, atomic saves, base-revision guard, undo, injection-safe data handling |
+| 7 Verification and acceptance | Implemented | metric panel, five profiles (incl. `svg_roundtrip`), 22 demonstrations + 10 audit regressions; the correction loop is operator-driven (iterations recorded in measurement logs) |
+| 8 Architecture | Implemented | schema version 1.0.0 (no migrations needed yet), stable ids, immutable baselines, content-hashed assets, atomic saves, base-revision guard, undo, serialization-safe SVG compiler with an allowlist, renderer pin, portable bundles |
 
-## 7. Known limitations
+## 8. Known limitations
 
 - **Adapters:** static raster only. PDF, layered sources (PSD/Figma/AI), live UI, motion, packaging and 3D are
   explicitly unsupported.
@@ -173,14 +236,17 @@ defects, and each fix made the engine more honest or more accurate:
   that client material is not part of this repository).
 - **Reflow** anchors groups to edges and scales uniformly; tall formats can leave wide empty bands that need a
   design decision.
-- **Pixel-region locks** are declared but not enforced as separate checks.
+- **Host storage:** bundles work with any mounted folder; an API-only host store (e.g. ChatGPT Work) needs an
+  adapter that is not included or tested.
+- **Cross-machine reproduction:** the renderer pin detects a different browser or machine; identical pixels across
+  machines are not claimed.
 - **Platform:** verified on Windows with Chrome/Edge; the acceptance suite uses Windows system fonts.
 
-## 8. Reproducing everything
+## 9. Reproducing everything
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-lock.txt        # exact tested versions
 python skills/reverse-design/scripts/capabilities.py
 python skills/reverse-design/tests/run_acceptance.py          # writes ~/design-dna/acceptance/<run>/report.md
-python docs/tools/make_images.py ~/design-dna/acceptance/<run>   # regenerates the README images
+python docs/tools/make_images.py ~/design-dna/acceptance/<run> --out docs/images/evidence/<version>   # evidence screenshots
 ```

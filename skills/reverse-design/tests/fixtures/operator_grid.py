@@ -166,26 +166,62 @@ def main() -> int:
         "hierarchy": {"order": [f"n-photo-{i + 1}" for i in range(len(labels))], "status": "inferred"}}
     scene["verification"]["expected_text"] = {f"n-caption-{i + 1}": n for i, n in enumerate(labels)}
     meta = scene["source"]["metadata"]
+    m = lambda note, ev, conf="high": {"status": "measured", "note": note, "evidence_ids": list(ev), "confidence": conf}
+    ob = lambda note, ev: {"status": "observed", "note": note, "evidence_ids": list(ev), "confidence": "high"}
+    inf = lambda note, conf="medium", amb=None: dict({"status": "inferred", "note": note, "confidence": conf}, **({"ambiguity": amb} if amb else {}))
+    unk = lambda note, probe: {"status": "unknown", "note": note, "ambiguity": [probe]}
+    na = lambda note: {"status": "not_applicable", "note": note}
+    frames_ev = [f"ev-frame-{r + 1}-{c + 1}" for r in range(a.rows) for c in range(a.cols)]
+    cap_ev = [f"ev-caption-{i + 1}" for i in range(len(labels))]
+    fit_ev = [f["evidence_id"] for f in fitted]
     scene["scan"]["coverage"].update({
-        "composition": {"status": "measured", "note": f"{a.cols}x{a.rows} grid, {size}px frames, {gutter}px gutters", "evidence_ids": ["ev-grid-rows", "ev-grid-cols-row1"]},
-        "element_inventory": {"status": "observed", "note": f"background, {len(labels)} photos, {len(labels)} captions"},
-        "geometry": {"status": "measured", "note": f"frames ±1px, radius {radius}px, caption baselines fitted", "evidence_ids": ["ev-radius-frame-1"]},
-        "color": {"status": "measured", "note": "canvas + caption ink by role", "evidence_ids": ["ev-color-background-canvas", "ev-color-text-caption"]},
-        "typography": {"status": "inferred", "note": f"identity UNKNOWN; best candidate {best['name']} (IoU {statistics.mean(best['iou']):.2f})", "evidence_ids": [ranked_ev]},
-        "image_treatment": {"status": "unknown", "note": "grading baked into photos; originals not supplied"},
-        "depth_compositing": {"status": "observed", "note": "flat: no shadows, overlaps or blends visible"},
-        "surface_texture": {"status": "observed", "note": f"flat ground; JPEG {meta.get('jpeg_subsampling', 'n/a')} artifacts"},
-        "lighting": {"status": "not_applicable", "note": "no layout-level lighting; photos carry their own"},
-        "hierarchy_attention": {"status": "inferred", "note": "equal-weight grid; colour contrast may reorder attention"},
-        "message_mechanism": {"status": "inferred", "note": "range/choice via comparison grid"},
-        "character_theme": {"status": "inferred", "note": "clean catalogue, product-led"},
-        "usage_context": {"status": "inferred", "note": "feed ad / catalogue overview; unsuited to single-hero offers"},
-        "output_requirements": {"status": "unknown", "note": "no brief supplied"}})
+        "composition": dict(m(f"{a.cols}x{a.rows} grid, {size}px frames, {gutter}px gutters", ["ev-grid-rows", "ev-grid-cols-row1"]), facets={
+            "grid": m(f"{a.cols} columns x {a.rows} rows", ["ev-grid-rows", "ev-grid-cols-row1", "ev-grid-cols-row2"]),
+            "spacing": m(f"gutter {gutter}px; caption baselines {fitted[0]['params']['baseline']:.1f} / {fitted[-1]['params']['baseline']:.1f}", frames_ev + cap_ev),
+            "alignment": m("captions centred on their frames (constraint per caption)", fit_ev),
+            "whitespace": m(f"margins {xs[0]}px left, {W - xs[-1] - size}px right", ["ev-grid-cols-row1"])}),
+        "element_inventory": ob(f"background, {len(labels)} photos, {len(labels)} captions; no logo, CTA or rules", ["ev-grid-rows", "ev-transcription"]),
+        "geometry": dict(m(f"frames ±1px, radius {radius}px", frames_ev), facets={
+            "position_size": m("frame boxes and caption boxes", frames_ev + cap_ev),
+            "radii_strokes": m(f"corner radius {radius}px (least-squares circle); no strokes", ["ev-radius-frame-1", f"ev-radius-frame-{len(frames)}"], "medium"),
+            "transforms": ob("no rotation or skew visible", frames_ev)}),
+        "color": dict(m("canvas + caption ink by role", ["ev-color-background-canvas", "ev-color-text-caption"]), facets={
+            "role_tokens": m("background.canvas, text.caption", ["ev-color-background-canvas", "ev-color-text-caption"]),
+            "gradients": inf("no layout gradients; gradients exist only inside photos", "high"),
+            "opacity_blending": inf("no translucent layout elements visible", "high")}),
+        "typography": dict(inf(f"identity UNKNOWN; best candidate {best['name']} (IoU {statistics.mean(best['iou']):.2f})", "low",
+                               [f"{v['name']} IoU {statistics.mean(v['iou']):.2f}" for _, v in order[:3]]), facets={
+            "text": ob("captions transcribed (manual observation, no OCR)", ["ev-transcription"]),
+            "font_candidates": m("ranked by ink IoU with contact sheets", [ranked_ev], "medium"),
+            "font_identity": unk("no source evidence names the font file", "original font file or source document"),
+            "size_line_height": inf(f"{fsize}px fitted for the substitute font (conditional on that candidate)", "low"),
+            "tracking": inf("0 assumed; tracking not separable from the substitute's widths", "low"),
+            "baselines_alignment": m("baselines measured from ink and render-fitted; centred", cap_ev + fit_ev),
+            "direction": ob("left-to-right Latin capitals", ["ev-transcription"])}),
+        "image_treatment": dict(unk("photos are bounded reference crops; originals and grading recipe unknown", "original photos"), facets={
+            "images": ob(f"{len(labels)} photographs", frames_ev),
+            "crop_intent": unk("only the visible crop exists; how it was cropped from originals is unknown", "original photos"),
+            "masks": m(f"rounded rectangle, radius {radius}px", ["ev-radius-frame-1"], "medium"),
+            "treatment": unk("grading baked into pixels", "original photos")}),
+        "depth_compositing": dict(ob("flat: photos sit on the ground, nothing overlaps", frames_ev), facets={
+            "layering": ob("background, then photo + caption per card", frames_ev),
+            "shadows": ob("no drop shadows around frames (edge profile flat)", frames_ev),
+            "blend_modes": inf("normal blending everywhere (no evidence of other modes)", "medium")}),
+        "surface_texture": dict(ob(f"flat ground; JPEG {meta.get('jpeg_subsampling', 'n/a')} artifacts", ["ev-src-metadata"]), facets={
+            "textures": ob("no layout texture; JPEG block artifacts only", ["ev-src-metadata"])}),
+        "lighting": na("no layout-level lighting; photos carry their own"),
+        "hierarchy_attention": inf("equal-weight grid; the most saturated photo may take first fixation", "medium"),
+        "message_mechanism": dict(inf("range/choice through a comparison grid", "medium"),
+                                  facets={"message_delivery": inf("equal frames + names -> compare -> pick one", "medium",
+                                                                  ["could also read as a catalogue index rather than an ad"])}),
+        "character_theme": inf("clean catalogue, product-led", "medium"),
+        "usage_context": inf("feed ad / catalogue overview; unsuited to single-hero offers", "low"),
+        "output_requirements": unk("no brief supplied", "target channel, size and format from the brief")})
     scene["scan"]["state"] = "complete"
     write_json(tdir / "scene.json", scene)
     p = read_json(tdir / "passport.json")
     lab = lambda v, st="suggested": {"value": v, "status": st}
-    p.update(character=lab("clean product catalogue"), goal=lab("show range breadth"), mechanism=lab("comparison grid with captions", "inferred"),
+    p.update(character=lab("clean product catalogue"), goal=lab("show range breadth"), theme=lab("home furniture range"), mechanism=lab("comparison grid with captions", "inferred"),
              channels=lab(["social feed", "catalogue page"]), usage=lab("collection launches, range overviews"),
              unsuitable_for=lab("single hero product, price-led offers"), literal_message=lab(" · ".join(labels), "observed"),
              visual_signature=["flat ground", f"{a.cols}x{a.rows} equal photo grid", "small radius", "bold centred captions"],

@@ -1,32 +1,33 @@
-"""Compile a scene model to an SVG master and render it to PNG in a pinned browser.
+"""Compile a scene model to SVG and render it to PNG in the pinned browser.
 
 Usage: python render_static.py <template-id> --out <dir> [--scene file] [--isolate] [--formats png,svg]
+                               [--svg-fonts embed|reference] [--pin-policy enforce|migrate]
 
-Renderer: Playwright driving Google Chrome, else Microsoft Edge, else Playwright's bundled Chromium
-(HarfBuzz shaping, bidi; DESIGN_DNA_BROWSER=chrome|msedge|chromium pins one) at DPR 1,
-sRGB forced, LCD text off, GPU off, animations disabled, fonts loaded from pinned files.
+Renderer: Playwright driving Chrome / Edge / bundled Chromium (see renderer_env.py). Once a baseline is approved the
+scene carries `render_profile.pin`; a render under a different browser channel/version/flags stops with
+`renderer_drift` (pin-policy `migrate` renders anyway and reports the differences, for baseline migration only).
+DPR 1, sRGB forced, LCD text off, GPU off, animations disabled, fonts loaded from content-hashed files.
 Text fitting: `strict` reports overflow; `fit` shrinks only down to fit.min_size, then reports.
+--isolate also writes one alpha mask per node (masks/<node>.png): the exact painted footprint incl. shadows.
+SVG export: one self-contained file + element manifest + round-trip verification (svg_export.py).
 """
 from __future__ import annotations
 
 import argparse
+import base64
 import html
 import json
-import os
-import platform
-import shutil
 import sys
-from contextlib import contextmanager
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import DnaError, read_json, safe_path, sha256_file, template_dir, token_value, write_json  # noqa: E402
+from renderer_env import browser, capture, compare_pin, drift_error, environment, pin_of, requested_channel  # noqa: E402
 from validate_model import check_scene, resolved_font  # noqa: E402
 
-CHANNELS = ("chrome", "msedge", "chromium")  # chromium = Playwright's bundled build (`playwright install chromium`)
-CHANNEL = os.environ.get("DESIGN_DNA_BROWSER")  # pins one channel; unset = first of CHANNELS that launches
-BROWSER_ARGS = ["--force-color-profile=srgb", "--disable-lcd-text", "--disable-gpu", "--font-render-hinting=none"]
 FIT_STEP = 0.25
+MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif",
+        ".ttf": "font/ttf", ".otf": "font/otf", ".woff": "font/woff", ".woff2": "font/woff2"}
 
 
 def fmt(v) -> str:
@@ -35,6 +36,42 @@ def fmt(v) -> str:
 
 def esc(s: str) -> str:
     return html.escape(s, quote=True)
+
+
+def css_str(s: str) -> str:
+    """A CSS string literal that cannot end a <style> element or its own quotes (data never becomes markup)."""
+    out = str(s).replace("\\", "\\5C ").replace('"', "\\22 ").replace("<", "\\3C ").replace(">", "\\3E ").replace("&", "\\26 ")
+    return '"' + out.replace("\n", "\\A ").replace("\r", "") + '"'
+
+
+SVG_TAGS = {"svg", "style", "defs", "g", "use", "rect", "ellipse", "path", "text", "tspan", "image", "clipPath", "mask", "filter",
+            "linearGradient", "radialGradient", "stop", "feGaussianBlur", "feOffset", "feFlood", "feComposite", "feMerge",
+            "feMergeNode", "feMorphology", "feColorMatrix", "feComponentTransfer", "feFuncR", "feFuncG", "feFuncB", "feBlend",
+            "feTurbulence"}
+
+
+def check_svg(svg: str, file_root=None) -> None:
+    """Refuse compiled SVG that is not well-formed or contains anything beyond the drawing vocabulary:
+    no script/foreignObject/links, no on* handlers, references only to #ids, data: URIs or files inside the template."""
+    import xml.etree.ElementTree as ET
+
+    try:
+        root_el = ET.fromstring(svg)
+    except ET.ParseError as e:
+        raise DnaError(f"compiled SVG is not well-formed XML: {e}", "unsafe_or_invalid_svg")
+    base = Path(file_root).resolve().as_uri() if file_root else None
+    for el in root_el.iter():
+        tag = el.tag.split("}")[-1]
+        if tag not in SVG_TAGS:
+            raise DnaError(f"compiled SVG contains a disallowed element <{tag}>", "unsafe_or_invalid_svg")
+        for k, v in el.attrib.items():
+            name = k.split("}")[-1]
+            if name.lower().startswith("on"):
+                raise DnaError(f"compiled SVG contains an event handler attribute {name!r}", "unsafe_or_invalid_svg")
+            if name == "href" and not (v.startswith(("#", "data:")) or (base and v.startswith(base))):
+                raise DnaError(f"compiled SVG references an external resource: {v[:80]}", "unsafe_or_invalid_svg")
+        if tag == "style" and ("@import" in (el.text or "") or "javascript:" in (el.text or "").lower()):
+            raise DnaError("compiled SVG style contains @import / javascript:", "unsafe_or_invalid_svg")
 
 
 def color(c: str):
@@ -52,9 +89,12 @@ class Compiler:
 
     def href(self, asset_id: str) -> str:
         a = self.scene["assets"][asset_id]
+        f = safe_path(self.tdir, a["path"])
         if self.href_mode == "file":
-            return safe_path(self.tdir, a["path"]).as_uri()
-        return a["path"]  # relative: export copies assets/ next to the svg
+            return f.as_uri()
+        if self.href_mode.startswith("data"):  # self-contained export
+            return f"data:{MIME.get(f.suffix.lower(), 'application/octet-stream')};base64," + base64.b64encode(f.read_bytes()).decode()
+        return a["path"]
 
     def paint(self, p, gid: str):
         if p is None:
@@ -95,18 +135,21 @@ class Compiler:
         allowed = " ".join(css for key, css in (("bold", "weight"), ("italic", "style")) if synth.get(key))
         style = ["white-space:pre", "font-kerning:normal", f"font-synthesis:{allowed or 'none'}"]
         if f.get("features"):
-            style.append("font-feature-settings:" + ",".join(f'"{k}" {v}' for k, v in f["features"].items()))
+            style.append("font-feature-settings:" + ",".join(f"{css_str(k)} {int(v)}" for k, v in f["features"].items()))
         if f.get("variation"):
-            style.append("font-variation-settings:" + ",".join(f'"{k}" {fmt(v)}' for k, v in f["variation"].items()))
+            style.append("font-variation-settings:" + ",".join(f"{css_str(k)} {fmt(v)}" for k, v in f["variation"].items()))
+        stroke = ""
+        if n.get("stroke"):  # centre-aligned text stroke (other alignments are rejected by validation)
+            stroke = " " + self.fill_attrs(n["stroke"]["color"], n["id"] + "-stroke", "stroke") + f' stroke-width="{fmt(n["stroke"]["width"])}"' 
         hs = f.get("horizontal_scale", 1)
         tf = f' transform="translate({fmt(ax)} 0) scale({fmt(hs)} 1) translate({fmt(-ax)} 0)"' if hs != 1 else ""
         spans = "".join(f'<tspan x="{fmt(ax)}" y="{fmt(n["first_baseline"] + i * lh)}">{esc(line)}</tspan>'
                         for i, line in enumerate(n["content"].split("\n")))
         lang = f' xml:lang="{esc(n["lang"])}"' if n.get("lang") else ""
-        return (f'<text font-family="{esc(fam)}" font-size="{fmt(size)}" font-weight="{fmt(f.get("weight", 400))}" '
+        return (f'<text font-family="{esc(css_str(fam) if f.get("asset") else fam)}" font-size="{fmt(size)}" font-weight="{fmt(f.get("weight", 400))}" '
                 f'font-style="{f.get("style", "normal")}" {self.fill_attrs(n.get("fill", "#000000"), n["id"] + "-fill")} '
-                f'letter-spacing="{fmt(n.get("tracking", 0))}" direction="{d}" text-anchor="{anchor}"{lang}{tf} '
-                f'style="{";".join(style)}">{spans}</text>')
+                f'letter-spacing="{fmt(n.get("tracking", 0))}" direction="{d}" text-anchor="{anchor}"{lang}{tf}{stroke} '
+                f'style="{esc(";".join(style))}">{spans}</text>')
 
     def image_rect(self, asset, g, pl):
         aw, ah = asset["width"], asset["height"]
@@ -272,14 +315,19 @@ class Compiler:
         for i, fx in enumerate(n.get("effects", [])):
             if fx["type"] == "drop_shadow" and fx.get("enabled", True):
                 blend = fx.get("blend", "normal")
-                st = f' style="mix-blend-mode:{blend}"' if blend != "normal" else ""
+                st = f' style="mix-blend-mode:{esc(blend)}"' if blend != "normal" else ""
                 shadows += f'<use href="#{n["id"]}" filter="url(#{self.shadow_filter(n, fx, i)})"{st}/>'
         return f'<g data-dna="{n["id"]}">{shadows}<g {" ".join(attrs)}>{body}</g></g>'
 
     def compile(self) -> str:
         body = "".join(self.node(n) for n in self.scene["nodes"] if not n.get("parent"))
+        def src(aid):
+            if self.href_mode == "data-nofonts":  # export without font bytes: resolve by installed font name
+                names = self.scene["assets"][aid].get("font_names") or {}
+                return f'local({css_str(names.get("full", ""))}), local({css_str(names.get("postscript", ""))})'
+            return f"url({css_str(self.href(aid))})"
         faces = "".join(
-            f'@font-face{{font-family:"{fam}";src:url("{self.href(aid)}");font-weight:1 1000;font-style:normal;}}'
+            f"@font-face{{font-family:{css_str(fam)};src:{src(aid)};font-weight:1 1000;font-style:normal;}}"
             for aid, fam in self.fonts.items())
         return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{fmt(self.W)}" height="{fmt(self.H)}" '
                 f'viewBox="0 0 {fmt(self.W)} {fmt(self.H)}"><style>{faces}</style>'
@@ -288,47 +336,14 @@ class Compiler:
 
 def compile_svg(scene, tdir, href_mode="file", fit_sizes=None):
     c = Compiler(scene, tdir, href_mode, fit_sizes)
-    return c.compile(), c.fonts
+    svg = c.compile()
+    check_svg(svg, tdir if href_mode == "file" else None)
+    return svg, c.fonts
 
 
-def capture(page, **kw):
-    """page.screenshot with a bounded retry: headless Chromium occasionally returns 'Unable to capture screenshot'."""
-    from playwright.sync_api import Error
-
-    for attempt in range(3):
-        try:
-            return page.screenshot(**kw)
-        except Error:
-            if attempt == 2:
-                raise
-            page.wait_for_timeout(250)
-
-
-def launch(p):
-    """Launch the renderer: DESIGN_DNA_BROWSER if set, else the first of Chrome, Edge, bundled Chromium.
-    Returns (browser, channel). The channel and version are recorded in every render profile."""
-    from playwright.sync_api import Error
-
-    tried = []
-    for ch in ([CHANNEL] if CHANNEL else CHANNELS):
-        try:
-            return p.chromium.launch(channel=None if ch == "chromium" else ch, args=BROWSER_ARGS), ch
-        except Error as e:
-            tried.append(f"{ch}: {str(e).strip().splitlines()[0][:160]}")
-    raise DnaError("no Chromium-based browser could be launched", "renderer_unavailable",
-                   {"tried": tried, "fix": "install Google Chrome or Microsoft Edge, or run `python -m playwright install chromium`"})
-
-
-@contextmanager
-def browser():
-    from playwright.sync_api import sync_playwright
-
-    with sync_playwright() as p:
-        b, ch = launch(p)
-        try:
-            yield b, ch
-        finally:
-            b.close()
+def _block_network(page):
+    """Only local files and data: URIs may load while rendering; anything else is aborted."""
+    page.route("**/*", lambda route: route.continue_() if route.request.url.startswith(("file:", "data:")) else route.abort())
 
 
 def _load(page, svg: str, work: Path):
@@ -375,13 +390,15 @@ def _measure_fit(page, scene) -> dict:
       } return out; }""", texts)
 
 
-def _isolated_bounds(page, scene, W, H) -> dict:
+def _isolated_bounds(page, scene, W, H, mask_dir=None) -> dict:
     import io
 
     import numpy as np
     from PIL import Image
 
     out = {}
+    if mask_dir:
+        Path(mask_dir).mkdir(parents=True, exist_ok=True)
     for n in scene["nodes"]:
         page.evaluate("""(id) => { let s = document.getElementById('dna-iso'); if (!s) { s = document.createElement('style');
             s.id = 'dna-iso'; document.head.appendChild(s); }
@@ -393,14 +410,17 @@ def _isolated_bounds(page, scene, W, H) -> dict:
         ys, xs = np.nonzero(alpha)
         out[n["id"]] = {"layout": [round(v, 3) for v in lay],
                         "rendered": None if not len(xs) else [int(xs.min()), int(ys.min()), int(xs.max() - xs.min() + 1), int(ys.max() - ys.min() + 1)]}
+        if mask_dir and len(xs):
+            Image.fromarray(((alpha > 0) * 255).astype(np.uint8)).save(Path(mask_dir) / f"{n['id']}.png")
+            out[n["id"]]["mask"] = str(Path(mask_dir) / f"{n['id']}.png")
     page.evaluate("() => { const s = document.getElementById('dna-iso'); if (s) s.remove(); }")
     return out
 
 
-def render(scene, tdir, out_dir, isolate=False, formats=("png",), name="render") -> dict:
-    """Render scene to <out_dir>/<name>.png (+ .svg master with copied assets). Raises DnaError on conflicts."""
-    from importlib.metadata import version
-
+def render(scene, tdir, out_dir, isolate=False, formats=("png",), name="render", svg_fonts="embed",
+           pin_policy="enforce") -> dict:
+    """Render scene to <out_dir>/<name>.png (+ self-contained .svg + manifest + round-trip check).
+    Raises DnaError on invalid scenes, fit conflicts and renderer drift (unless pin_policy='migrate')."""
     rep = check_scene(scene, tdir)
     if not rep["valid"]:
         raise DnaError("scene does not validate; refusing to render", "invalid_scene", rep)
@@ -409,11 +429,21 @@ def render(scene, tdir, out_dir, isolate=False, formats=("png",), name="render")
         raise DnaError("canvas must be whole pixels to rasterize", "bad_canvas")
     W, H = int(W), int(H)
     out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    if (out_dir / f"{name}.png").exists():
+        raise DnaError(f"{out_dir / (name + '.png')} already exists; renders are immutable evidence", "immutable_conflict",
+                       {"fix": "render into a new folder"})
     work = Path(tdir) / ".render"
-    with browser() as (b, channel):
+    pin = pin_of(scene, tdir)
+    svg, fonts = compile_svg(scene, tdir)
+    font_recs = [{"asset": a, "sha256": scene["assets"][a]["sha256"], "names": scene["assets"][a].get("font_names")} for a in fonts]
+    with browser(requested_channel(pin)) as (b, channel):
+        env = environment(channel, b.version, W, H, scene["canvas"]["alpha"], font_recs)
+        diff = compare_pin(pin, env) if pin else {"hard": [], "soft": []}
+        if diff["hard"] and pin_policy == "enforce":
+            raise drift_error(pin, diff)
+        out_dir.mkdir(parents=True, exist_ok=True)
         page = b.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
-        svg, fonts = compile_svg(scene, tdir)
+        _block_network(page)
         _load(page, svg, work)
         fit = _measure_fit(page, scene)
         over = {k: v for k, v in fit.items() if v["status"] == "overflow"}
@@ -429,29 +459,18 @@ def render(scene, tdir, out_dir, isolate=False, formats=("png",), name="render")
             _load(page, svg, work)
         png = out_dir / f"{name}.png"
         capture(page, path=str(png), clip={"x": 0, "y": 0, "width": W, "height": H},
-                        omit_background=scene["canvas"]["alpha"] == "transparent", animations="disabled", caret="hide")
-        bounds = _isolated_bounds(page, scene, W, H) if isolate else {}
-        bver = b.version
+                omit_background=scene["canvas"]["alpha"] == "transparent", animations="disabled", caret="hide")
+        bounds = _isolated_bounds(page, scene, W, H, out_dir / "masks") if isolate else {}
     result = {"png": str(png), "png_sha256": sha256_file(png), "fit": fit, "fitted_sizes": sizes, "bounds": bounds,
-              "warnings": rep["warnings"], "editability": rep["editability"],
-              "render_profile": {
-                  "renderer": "playwright-chromium", "channel": channel, "browser_version": bver,
-                  "playwright": version("playwright"), "python": platform.python_version(), "os": platform.platform(),
-                  "viewport": [W, H], "device_scale_factor": 1, "browser_args": BROWSER_ARGS,
-                  "color_policy": "sRGB forced; image assets untagged -> treated as sRGB", "alpha": scene["canvas"]["alpha"],
-                  "font_synthesis": "none unless declared", "animations": "disabled",
-                  "randomness": "feTurbulence seeds fixed in scene",
-                  "fonts": [{"asset": a, "sha256": scene["assets"][a]["sha256"], "names": scene["assets"][a].get("font_names")} for a in fonts]}}
+              "warnings": rep["warnings"], "editability": rep["editability"], "render_profile": env,
+              "pin_check": {"pinned": bool(pin), "policy": pin_policy, "pinned_at": (pin or {}).get("pinned_at"), **diff,
+                            "status": "unpinned" if not pin else ("match" if not diff["hard"] else "DRIFT (migration render)")}}
     if "svg" in formats:
-        rel_svg, _ = compile_svg(scene, tdir, href_mode="relative", fit_sizes=sizes)
-        (out_dir / f"{name}.svg").write_text(rel_svg, encoding="utf-8")
-        (out_dir / "assets").mkdir(exist_ok=True)
-        for a in scene["assets"].values():
-            shutil.copy2(safe_path(tdir, a["path"]), out_dir / a["path"])
-        result["svg"] = str(out_dir / f"{name}.svg")
-        result["export_notes"] = ["SVG master references assets/ relatively; keep the folder together.",
-                                  "Design apps that ignore @font-face need the font files installed to show identical text.",
-                                  "SVG filters (shadows, treatments) may be rasterized or approximated by some editors."]
+        from svg_export import export_svg, verify_svg
+
+        exp = export_svg(scene, tdir, out_dir, name, sizes, svg_fonts)
+        result.update(svg=exp["svg"], svg_manifest=exp["manifest"],
+                      svg_verification=verify_svg(exp["svg"], png, scene, channel))
     write_json(out_dir / f"{name}.report.json", result)
     return result
 
@@ -464,14 +483,17 @@ def main() -> int:
     ap.add_argument("--isolate", action="store_true", help="also measure per-node rendered bounds")
     ap.add_argument("--formats", default="png,svg")
     ap.add_argument("--name", default="render")
+    ap.add_argument("--svg-fonts", choices=["embed", "reference"], default="embed")
+    ap.add_argument("--pin-policy", choices=["enforce", "migrate"], default="enforce")
     a = ap.parse_args()
     tdir = template_dir(a.template)
     try:
-        r = render(read_json(a.scene or tdir / "scene.json"), tdir, a.out, a.isolate, a.formats.split(","), a.name)
+        r = render(read_json(a.scene or tdir / "scene.json"), tdir, a.out, a.isolate, a.formats.split(","), a.name,
+                   a.svg_fonts, a.pin_policy)
     except DnaError as e:
         print(json.dumps(e.as_dict(), indent=2, ensure_ascii=False))
         return 2
-    print(json.dumps({k: r[k] for k in ("png", "png_sha256", "fitted_sizes", "warnings")}, indent=2, ensure_ascii=False))
+    print(json.dumps({k: r.get(k) for k in ("png", "png_sha256", "fitted_sizes", "warnings", "pin_check", "svg")}, indent=2, ensure_ascii=False))
     return 0
 
 

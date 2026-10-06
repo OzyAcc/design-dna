@@ -9,6 +9,7 @@
     "schema_version": {"const": "1.0.0"},
     "base_revision": {"type": "integer", "minimum": 0},
     "intent": {"type": "string", "description": "the user's words this patch was compiled from"},
+    "keep": {"enum": ["everything_else"], "description": "freeze every property path not requested or declared as a dependency"},
     "relax": {"type": "array", "items": {"type": "string"}, "description": "ids of relaxable constraints this request may break"},
     "ops": {
       "type": "array",

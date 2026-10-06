@@ -66,6 +66,56 @@ def fit_treatment(src, ref):
     return {"saturate": round(fit.x[0], 4), "contrast": round(fit.x[1], 4), "rms": float(np.sqrt(np.mean(fit.fun ** 2)))}
 
 
+def measured_coverage(log, fl, fh, fc, f1) -> dict:
+    """16-category coverage for the measured rebuild: every facet points at the evidence that produced it."""
+    ev = lambda *keys: [log[k]["evidence_id"] for k in keys]
+    fits = [fl[0]["evidence_id"], fh[0]["evidence_id"], fc[0]["evidence_id"], f1["evidence_id"]]
+    colors = ["ev-color-background-paper", "ev-color-accent-primary", "ev-color-text-secondary", "ev-color-text-primary", "ev-color-cta-text"]
+    m = lambda note, ids, conf="high": {"status": "measured", "note": note, "evidence_ids": list(ids), "confidence": conf}
+    ob = lambda note, ids: {"status": "observed", "note": note, "evidence_ids": list(ids), "confidence": "high"}
+    inf = lambda note, conf="medium", amb=None: dict({"status": "inferred", "note": note, "confidence": conf}, **({"ambiguity": amb} if amb else {}))
+    unk = lambda note, amb: {"status": "unknown", "note": note, "ambiguity": [amb]}
+    geo = ev("bar", "label", "h1", "h2", "hero_h", "hero_v", "pill", "cta", "logo")
+    return {
+        "input_canvas": m("1080x1350 PNG, sRGB assumed (untagged)", ["ev-src-metadata", "ev-src-canonical"]),
+        "composition": dict(m("single column, centred hero", geo), facets={
+            "grid": m("one column; hero centred on the canvas axis", ev("hero_h")), "spacing": m("stacking gaps from ink boxes", geo),
+            "alignment": m("shared left edge: accent bar, label, headline, CTA", ev("bar", "label", "h1", "pill")),
+            "whitespace": m("paper margins from ink extents", geo)}),
+        "element_inventory": ob("bar, label, headline (2 lines), hero, CTA pill + text, translucent sheen, logo", geo),
+        "geometry": dict(m("frames by edge scanlines, text by render fits", geo + fits), facets={
+            "position_size": m("every node", geo), "radii_strokes": m("hero radius by circle fit; pill radius = h/2", ev("radius", "pill"), "medium"),
+            "transforms": ob("no rotation visible", geo)}),
+        "color": dict(m("five role tokens", colors), facets={
+            "role_tokens": m("paper, accent, text primary/secondary, cta text", colors),
+            "gradients": inf("only inside the photo asset", "high"),
+            "opacity_blending": inf("sheen = white at a solved opacity (white is an assumption)", "medium", ["any (colour, opacity) pair with the same blend"])}),
+        "typography": dict(m("render-fitted with the best candidates", fits, "medium"), facets={
+            "text": ob("3 strings", ["ev-transcription"]),
+            "font_candidates": m("ranked per text by ink IoU + fit residual", fits, "medium"),
+            "font_identity": unk("best candidates are not proof of identity", "original font files or source document"),
+            "size_line_height": m("render fits", fits, "medium"), "tracking": m("label tracking from ink-moment seed + fit", [fl[0]["evidence_id"]], "medium"),
+            "baselines_alignment": m("render fits", fits), "direction": ob("ltr", ["ev-transcription"])}),
+        "image_treatment": dict(m("supplied original placed and graded by model fit", ev("hero_h", "hero_v"), "medium"), facets={
+            "images": ob("bag.png supplied as the original", ev("hero_h")),
+            "crop_intent": m("cover with focal shift from correlation search", ev("hero_v"), "medium"),
+            "masks": m("rounded rectangle, circle-fitted radius", ev("radius"), "medium"),
+            "treatment": inf("saturate then contrast (order assumed)", "medium", ["contrast-then-saturate fits differently"])}),
+        "depth_compositing": dict(m("shadow fitted on four probes", ev("shadow"), "medium"), facets={
+            "layering": inf("bar, text, hero, CTA, sheen above pill, logo", "high"),
+            "shadows": m("offset, blur and strength family from the joint probe fit", ev("shadow"), "medium"),
+            "blend_modes": unk("multiply chosen; normal is indistinguishable on a uniform ground", "layered source or a second background")}),
+        "surface_texture": dict(ob("flat paper", colors[:1]), facets={"textures": ob("none in the layout", colors[:1])}),
+        "lighting": inf("soft light from above, implied by the shadow offset"),
+        "hierarchy_attention": inf("headline -> hero -> CTA (hypothesis)"),
+        "message_mechanism": dict(inf("promise + product as evidence + CTA"), facets={"message_delivery": inf("serif promise, product proof, one red action")}),
+        "character_theme": inf("quiet editorial premium"),
+        "usage_context": inf("social feed product launch (4:5)", "low"),
+        "responsive_system": {"status": "unknown", "note": "a single still shows one state"},
+        "output_requirements": unk("no brief supplied", "channel, size and format"),
+    }
+
+
 def t01(root: Path, fx: Path, ref: Path, record):
     o = root / "t01-synthetic-measured"
     o.mkdir(parents=True, exist_ok=True)
@@ -208,8 +258,31 @@ def t01(root: Path, fx: Path, ref: Path, record):
          "provenance": {"*": {"status": "inferred", "confidence": "medium", "note": "least-squares circle through boundary points; white assumed, opacity solved over paper"}}},
         {"id": "n-logo", "alias": "logo", "type": "path", "role": "logo", "parent": None, "path": lg["d"], "path_box": lg["box"],
          "fill": {"token": "text.primary"}, "geometry": dict(zip("xywh", logo["ink_box"])), "provenance": ms}]
+    # replaceable roles the operator identified (a scan without slots cannot claim editability)
+    scene["slots"] = [
+        {"id": "slot-headline", "role": "headline", "node": "n-headline", "type": "text", "fit": "strict", "limits": {"max_lines": 2}},
+        {"id": "slot-label", "role": "label", "node": "n-label", "type": "text", "fit": "strict"},
+        {"id": "slot-hero", "role": "hero", "node": "n-hero", "type": "image", "treatments_allowed": ["saturate", "contrast"]},
+        {"id": "slot-cta", "role": "cta", "node": "n-cta-text", "type": "text", "fit": "strict"},
+        {"id": "slot-accent", "role": "accent", "node": "n-accent-bar", "type": "color"},
+        {"id": "slot-logo", "role": "logo", "node": "n-logo", "type": "logo"}]
     scene["verification"]["expected_text"] = {"n-label": "NEW SEASON", "n-headline": "Carry the\nquiet confidence.", "n-cta-text": "Shop the edit"}
+    from common import add_evidence
+
+    add_evidence(tdir, [{"evidence_id": "ev-transcription", "source_sha256": scene["source"]["sha256"], "region": None, "object": "typography",
+                         "method": "manual_observation", "tool": "operator reading (no OCR engine)", "value": scene["verification"]["expected_text"],
+                         "status": "observed", "confidence": "high", "justification": "three short English strings read at enlargement"}])
+    scene["scan"] = {"state": "complete", "coverage": measured_coverage(log, fl, fh, fc, f1)}
     write_json(tdir / "scene.json", scene)
+    pp = read_json(tdir / "passport.json")
+    lab = lambda v, st="suggested": {"value": v, "status": st}
+    pp.update(character=lab("quiet editorial premium"), theme=lab("everyday luxury accessories"), goal=lab("present one premium product"),
+              usage=lab("single-product launches on social feeds"), unsuitable_for=lab("range overviews, price-led offers"),
+              literal_message=lab("Carry the quiet confidence. Shop the edit.", "observed"), takeaway=lab("premium without shouting", "inferred"),
+              mechanism=lab("serif promise -> product as evidence -> single red call to action", "inferred"),
+              unresolved=["font identity unknown (best candidates rendered)", "shadow opacity/colour is a family, blend mode unresolved",
+                          "treatment order saturate->contrast assumed"])
+    write_json(tdir / "passport.json", pp)
     write_json(o / "measurements.json", log)
     r = render(scene, tdir, o / "render", isolate=True, formats=("png", "svg"))
     rep = compare(tdir / "source" / "canonical.png", r["png"], o / "compare", scene, r, "editable_close", "editable_rendering", editability_report(scene))
@@ -228,7 +301,7 @@ def t01(root: Path, fx: Path, ref: Path, record):
             "saturate_err": abs(tr["saturate"] - 0.85), "contrast_err": abs(tr["contrast"] - 1.08), "focal_y_err": abs(focal[1] - 0.55),
             "sheen_alpha_err": abs(alpha - 0.35), "fonts_top": [fl[0]["name"], fh[0]["name"], fc[0]["name"]], "pixel_verdict": rep["overall"]}
     write_json(o / "scores.json", errs)
-    record(1, "Reconstruct a known synthetic layered reference from measurements", {
+    record(1, "Rebuild a known layered reference from its flattened image + supplied photo, logo and candidate fonts", {
         "geometry of shapes/frames within 1px": all(v <= 1 for v in geo.values()) or geo,
         "text baselines within 1px; x within 1px": all(v <= 1 for v in errs["baselines_px"].values()) and all(v <= 1 for v in errs["x_px"].values()) or [errs["baselines_px"], errs["x_px"]],
         "font sizes within 1.5%; line height within 1px; tracking within 0.5px": errs["label_size_pct"] <= 1.5 and errs["head_size_pct"] <= 1.5 and errs["cta_size_pct"] <= 1.5 and errs["line_height_px"] <= 1 and errs["label_tracking_px"] <= 0.5
@@ -241,6 +314,7 @@ def t01(root: Path, fx: Path, ref: Path, record):
         "treatment saturate/contrast within 0.05; focal within 0.1": errs["saturate_err"] <= 0.05 and errs["contrast_err"] <= 0.05 and errs["focal_y_err"] <= 0.1
         or {k: errs[k] for k in ("saturate_err", "contrast_err", "focal_y_err")},
         "sheen opacity within 0.03 (white assumed)": errs["sheen_alpha_err"] <= 0.03 or errs["sheen_alpha_err"],
+        "the rebuild itself passes editable_close against the reference": rep["overall"]["status"] == "pass" or rep["overall"],
     }, [o / "scores.json", o / "measurements.json", o / "compare" / "side_by_side.png", o / "compare" / "diff_heatmap.png"],
         notes=f"pixel verdict (editable_close): {rep['overall']['status']}; failed={rep['overall'].get('failed')}")
 

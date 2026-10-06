@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (TOOL_VERSION, add_evidence, find_node, font_names, import_asset, load_evidence,  # noqa: E402
                     read_json, sha256_file, slugify, template_dir, write_json)
 from measure import box_arg  # noqa: E402
-from render_static import launch  # noqa: E402
+from renderer_env import launch  # noqa: E402
 
 THR = 40
 TIE = 0.01

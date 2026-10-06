@@ -29,10 +29,12 @@ sys.path[:0] = [str(SCRIPTS), str(HERE / "fixtures"), str(HERE)]
 import numpy as np  # noqa: E402
 
 import dna  # noqa: E402
-from apply_patch import load_variant, render_cached  # noqa: E402
+from apply_patch import load_variant  # noqa: E402
+from verify_change import render_cached  # noqa: E402
 from common import DnaError, import_asset, read_json, sha256_file, template_dir, write_json  # noqa: E402
 from compare_render import compare, decode, pixel_metrics  # noqa: E402
 from editorial_gt import build_gt  # noqa: E402
+from report import write_report  # noqa: E402
 from inspect_source import create_template  # noqa: E402
 from render_static import compile_svg, render  # noqa: E402
 from validate_model import check_scene, editability_report  # noqa: E402
@@ -47,8 +49,9 @@ def out(n, name) -> Path:
     return p
 
 
-def record(n, title, checks: dict, artifacts=(), notes=""):
-    st = "pass" if all(v is True for v in checks.values()) else "fail"
+def record(n, title, checks: dict, artifacts=(), notes="", status=None):
+    """status='unverified' records a capability that could not be exercised here (never counted as a pass)."""
+    st = status or ("pass" if checks and all(v is True for v in checks.values()) else "fail")
     RESULTS.append({"id": n, "title": title, "status": st, "checks": checks, "artifacts": [str(a) for a in artifacts], "notes": notes})
     print(f"[{st.upper()}] T{n:02d} {title}")
     for k, v in checks.items():
@@ -72,7 +75,15 @@ def copy_model(src_tid, dst_tid):
     for k in ("tokens", "assets", "nodes", "constraints", "slots", "communication", "locks", "scan"):
         b[k] = a[k]
     b["verification"]["expected_text"] = a["verification"]["expected_text"]
+    from common import add_evidence, load_evidence
+
+    add_evidence(dt_, load_evidence(s)["records"])  # the layered source's construction manifest travels with its model
     write_json(dt_ / "scene.json", b)
+    from editorial_gt import passport_fields
+
+    pp = read_json(dt_ / "passport.json")
+    pp.update(passport_fields())
+    write_json(dt_ / "passport.json", pp)
 
 
 # ------------------------------------------------------------------ setup
@@ -133,14 +144,18 @@ def t04_headline_only():
     _, _, after = load_variant(tid, vid)
     v = txn["verification"]
     shutil.copy2(v["renders"]["base"], o / "before.png")
-    shutil.copy2(v["renders"]["variant"], o / "after.png")
+    shutil.copy2(v["renders"]["candidate"], o / "after.png")
     (o / "transaction.json").write_text(json.dumps(txn, indent=2, default=str), encoding="utf-8")
+    vc = v["visual_changes"]
+    vb = (v.get("vs_approved_baseline") or v)["visual_changes"]
     record(4, "Change only one headline", {
         "committed": r["status"] == "committed",
-        "only headline.content changed in the model": v["property_check"]["changed_paths"] == ["nodes.n-headline.content"] or v["property_check"],
+        "only headline.content changed in the model": v["model_changes"]["actual_changed_paths"] == ["nodes.n-headline.content"] or v["model_changes"],
         "locks unchanged": before["locks"] == after["locks"],
-        "zero changed pixels outside declared influence": v["pixel_preservation"]["changed_outside_influence"] == 0 or v["pixel_preservation"],
-        "influence declared before pixel check": v["expected_influence"]["declared_before_pixel_check"] is True,
+        "cumulative check against the approved template baseline (0 px outside)": vb["compared_against"].startswith("approved template baseline")
+        and vb["outside_influence"] == 0 or vb,
+        "zero changed pixels outside the declared mask influence": vc["outside_influence"] == 0 or vc,
+        "influence = per-node alpha masks declared before the pixel check": "declared before" in vc["influence"]["method"],
         "requested edit verified in render": all(x["status"] == "pass" for x in v["requested_edits"]) or v["requested_edits"],
     }, [o / "before.png", o / "after.png", o / "transaction.json"])
     return tid, vid, r["revision"]
@@ -164,15 +179,15 @@ def t05_hero_replace():
                                {"op": "replace", "node": "hero", "file": str(FX / "bag_baked.png"), "baked_effects": ["cast_shadow"]}]})
     fixed = dna.run(f'batch "{patch}"')
     shutil.copy2(v["renders"]["base"], o / "before.png")
-    shutil.copy2(v["renders"]["variant"], o / "after.png")
-    shutil.copy2(fixed["verification"]["renders"]["variant"], o / "after-baked-cutout.png")
+    shutil.copy2(v["renders"]["candidate"], o / "after.png")
+    shutil.copy2(fixed["verification"]["renders"]["candidate"], o / "after-baked-cutout.png")
     (o / "transaction.json").write_text(json.dumps({"replace": txn, "double_shadow_rejection": err.as_dict() if err else None,
                                                     "resolution": fixed}, indent=2, default=str), encoding="utf-8")
     keep = ("placement", "mask", "treatment", "effects", "geometry")
     record(5, "Replace hero asset, preserve treatment/anchor, prevent double shadow", {
         "treatment, placement(focal/fit), mask, effects, geometry unchanged": all(hb[k] == ha[k] for k in keep) or {k: (hb[k], ha[k]) for k in keep if hb[k] != ha[k]},
         "asset changed + aspect change reported": any("aspect" in str(c[0]) or c[0].endswith("placement") for c in r["changes"]) or r["changes"],
-        "pixels outside hero+shadow influence unchanged": v["pixel_preservation"]["changed_outside_influence"] == 0 or v["pixel_preservation"],
+        "pixels outside hero+shadow footprint unchanged": v["visual_changes"]["outside_influence"] == 0 or v["visual_changes"],
         "baked-shadow asset with live shadow rejected (double shadow)": ok_baked,
         "head unchanged after rejection": still["revision"] == after["revision"],
         "explicit resolution (disable editable shadow) commits": fixed["status"] == "committed",
@@ -187,20 +202,21 @@ def t06_token():
     r = dna.run('set tokens.accent.primary = "#FFD400"')
     txn = read_json(vd / "transactions" / f"txn-{r['revision']:04d}.json")
     v = txn["verification"]
-    bound = sorted(c["path"].split(".")[1] for c in txn["changes"] if c["kind"] == "dependency")
+    bound = sorted(c["path"].split(".")[1] for c in txn["changes"] if c["kind"] == "visual")
     a, _ = decode(v["renders"]["base"])
-    b, _ = decode(v["renders"]["variant"])
+    b, _ = decode(v["renders"]["candidate"])
     hero = (slice(430, 1050), slice(140, 940))
     hero_same = int(np.count_nonzero(np.abs(a[hero].astype(int) - b[hero].astype(int)).max(axis=2))) == 0
     shutil.copy2(v["renders"]["base"], o / "before.png")
-    shutil.copy2(v["renders"]["variant"], o / "after.png")
+    shutil.copy2(v["renders"]["candidate"], o / "after.png")
     (o / "transaction.json").write_text(json.dumps(txn, indent=2, default=str), encoding="utf-8")
+    vc = v["visual_changes"]
     record(6, "Replace a color token: all and only bound uses change", {
         "bound uses = accent bar + CTA pill": bound == ["n-accent-bar", "n-cta-pill"] or bound,
         "new color verified in each bound node's pixels": all(x["status"] == "pass" for x in v["requested_edits"]) or v["requested_edits"],
-        "no pixel changes outside bound nodes": v["pixel_preservation"]["changed_outside_influence"] == 0 or v["pixel_preservation"],
-        "translucent sheen reported as compositing consequence": [c["node"] for c in v["pixel_preservation"]["compositing_consequences"]] == ["n-sheen"]
-        or v["pixel_preservation"]["compositing_consequences"],
+        "no pixel changes outside the bound nodes' footprints": vc["outside_influence"] == 0 or vc,
+        "translucent sheen reported as compositing consequence": [c["node"] for c in vc["compositing_consequences"]] == ["n-sheen"]
+        or vc["compositing_consequences"],
         "photo (incl. yellow brass clasp) not tinted": hero_same,
     }, [o / "before.png", o / "after.png", o / "transaction.json"])
 
@@ -237,7 +253,8 @@ def t08_arabic():
     n = [x for x in after["nodes"] if x["id"] == "n-headline"][0]
     from playwright.sync_api import sync_playwright
 
-    from render_static import _load, launch
+    from render_static import _load
+    from renderer_env import launch
 
     svg, _ = compile_svg(after, template_dir(tid))
     with sync_playwright() as p:
@@ -254,7 +271,7 @@ def t08_arabic():
                     bang_x: span.getExtentOfChar(iBang).x, first_x: span.getExtentOfChar(iFirst).x,
                     dir: t.getAttribute('direction'), anchor: t.getAttribute('text-anchor')}; }""")
         b.close()
-    shutil.copy2(r["verification"]["renders"]["variant"], o / "arabic.png")
+    shutil.copy2(r["verification"]["renders"]["candidate"], o / "arabic.png")
     (o / "probe.json").write_text(json.dumps({"probe": probe, "fit": n.get("fit"), "txn": r}, indent=2, default=str, ensure_ascii=False), encoding="utf-8")
     record(8, "Mixed Arabic/English headline: shaping, direction, punctuation, glyphs", {
         "font without Arabic glyphs rejected (no silent fallback)": no_font,
@@ -275,7 +292,7 @@ def t09_reflow():
     vd, _, after = load_variant(tid, vid)
     txn = read_json(vd / "transactions" / f"txn-{r['revision']:04d}.json")
     rp = txn["verification"]["reflow_preserve"]
-    shutil.copy2(txn["verification"]["renders"]["variant"], o / "reflow-1080x1920.png")
+    shutil.copy2(txn["verification"]["renders"]["candidate"], o / "reflow-1080x1920.png")
     (o / "transaction.json").write_text(json.dumps(txn, indent=2, default=str), encoding="utf-8")
     record(9, "Reflow 4:5 -> 9:16", {
         "target dims 1080x1920": rp["target_dims"] == [1080, 1920],
@@ -425,23 +442,6 @@ def t14_small_errors():
     }, [o / "results.json", o / "wrong-word" / "compare" / "crops" / "n-word.png", o / "logo-shift-3px" / "compare" / "diff_heatmap.png"])
 
 
-def write_report(setup_info):
-    passed = sum(r["status"] == "pass" for r in RESULTS)
-    rep = {"run": RUN, "root": str(ROOT), "passed": passed, "total": len(RESULTS), "setup": setup_info, "results": RESULTS}
-    write_json(ROOT / "report.json", rep)
-    L = [f"# Design DNA acceptance run {RUN}", "", f"**{passed}/{len(RESULTS)} demonstrations passed.** Store: `{ROOT / 'store'}`", "",
-         "| # | Demonstration | Result |", "|---|---|---|"]
-    L += [f"| {r['id']} | {r['title']} | {r['status'].upper()} |" for r in sorted(RESULTS, key=lambda r: r["id"])]
-    for r in sorted(RESULTS, key=lambda r: r["id"]):
-        L += ["", f"## T{r['id']:02d} — {r['title']} ({r['status']})", ""]
-        L += [f"- {'✅' if v is True else '❌'} {k}" + ("" if v is True else f" → `{json.dumps(v, default=str)[:300]}`") for k, v in r["checks"].items()]
-        if r["notes"]:
-            L.append(f"- note: {r['notes']}")
-        L += [f"- artifact: `{a}`" for a in r["artifacts"]]
-    (ROOT / "report.md").write_text("\n".join(L) + "\n", encoding="utf-8")
-    print(f"\n{passed}/{len(RESULTS)} passed -> {ROOT / 'report.md'}")
-
-
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", default="")
@@ -474,8 +474,13 @@ def main() -> int:
         import operator_scans
 
         operator_scans.run(ROOT, FX, ref, record, want)
-    write_report({"ground_truth_template": gt, "reference": str(ref), "baseline": rec})
-    return 0 if all(r["status"] == "pass" for r in RESULTS) else 1
+    import regressions
+    import v2_demos
+
+    v2_demos.run(ROOT, FX, record, want, expect_error)
+    regressions.run(ROOT, FX, record, want, expect_error)
+    write_report(ROOT, RUN, RESULTS, {"ground_truth_template": gt, "reference": str(ref), "baseline": rec})
+    return 0 if all(r["status"] in ("pass", "unverified") for r in RESULTS) else 1
 
 
 if __name__ == "__main__":

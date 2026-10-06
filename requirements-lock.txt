@@ -1,0 +1,23 @@
+# Exact versions the 2.0.0 acceptance run passed with (Windows 10, Python 3.12.10).
+# Renderer: Google Chrome 154.0.8037.93 (pinned per template after baseline approval; Edge 154 used for the
+# drift test). Install: python -m pip install -r requirements-lock.txt
+# requirements.txt keeps minimum versions for normal installs; this file is for reproducing the tested setup.
+attrs==26.1.0
+fonttools==4.63.0
+greenlet==3.5.6
+ImageIO==2.38.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+lazy-loader==0.6
+networkx==3.7
+numpy==2.4.5
+packaging==26.2
+pillow==12.2.0
+playwright==1.63.0
+pyee==13.0.1
+referencing==0.37.0
+rpds-py==2026.9.1
+scikit-image==0.26.0
+scipy==1.18.1
+tifffile==2026.9.20
+typing_extensions==4.15.0

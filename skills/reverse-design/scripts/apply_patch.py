@@ -9,6 +9,8 @@
 
 Revisions are immutable files; undo moves the head pointer to the parent revision (nothing is deleted).
 A rejected transaction is recorded under rejected/ with its conflicts and options.
+A patch with "keep": "everything_else" authorises exactly the requested paths + their declared dependencies and
+freezes every other property path for that transaction (explicit locks still apply and still conflict).
 """
 from __future__ import annotations
 
@@ -19,14 +21,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import (ID_RE, DnaError, deep, diff_paths, now, read_json, slugify, template_dir,  # noqa: E402
-                    write_json)
-from compare_render import outside_influence  # noqa: E402
-from ops import apply_ops, check_constraints, check_locks, reading_order  # noqa: E402
+from common import ID_RE, DnaError, deep, now, read_json, slugify, template_dir, write_json  # noqa: E402
+from ops import apply_ops, check_constraints, check_locks  # noqa: E402
 from render_static import render  # noqa: E402
 from validate_model import check_scene, schema_errors  # noqa: E402
-
-IGNORED = ("revision", "base_revision", "variant", "render_profile")
+from verify_change import verify_change  # noqa: E402
 
 
 def vdir(tid, vid) -> Path:
@@ -66,131 +65,15 @@ def new_variant(tid, task, name=None) -> dict:
     return meta
 
 
-def _scene_key(scene) -> str:
-    return hashlib.sha256(json.dumps(scene, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
-
-
-def render_cached(tdir, vd, scene, formats=("png",)) -> dict:
-    """Renders are cached by scene content hash: a directory is never reused for a different scene."""
-    out = vd / "renders" / _scene_key(scene)
-    rep = out / "render.report.json"
-    if rep.exists() and (set(formats) <= {"png"} or (out / "render.svg").exists()):
-        return read_json(rep)
-    return render(scene, tdir, out, isolate=True, formats=formats)
-
-
-def _boxes_for(nodes, rb, ra, pad=1):
-    boxes = []
-    for nid in nodes:
-        for r in (rb, ra):
-            b = (r["bounds"].get(nid) or {}).get("rendered")
-            if b:
-                boxes.append([b[0] - pad, b[1] - pad, b[2] + 2 * pad, b[3] + 2 * pad])
-    return boxes
-
-
-def _intersects(a, b):
-    return a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
-
-
-def _probe_requested(base, after, changes, rb, ra):
-    """Check requested edits against the actual render, not just the model."""
-    import numpy as np
-    from PIL import Image
-
-    from compare_render import delta_e
-
-    img_a = np.asarray(Image.open(ra["png"]).convert("RGB"))
-    img_b = np.asarray(Image.open(rb["png"]).convert("RGB"))
-    out = []
-    for c in (c for c in changes if c["kind"] == "requested"):
-        p, res = c["path"], {"path": c["path"], "status": "unknown", "probe": "no render probe for this property"}
-        nid = p.split(".")[1] if p.startswith("nodes.") else None
-        if nid and p.endswith((".geometry.x", ".geometry.y")):
-            ax = 0 if p.endswith(".x") else 1
-            b0, b1 = (rb["bounds"].get(nid) or {}).get("rendered"), (ra["bounds"].get(nid) or {}).get("rendered")
-            if b0 and b1:
-                moved = b1[ax] - b0[ax]
-                res = {"path": p, "status": "pass" if abs(moved - (c["after"] - c["before"])) <= 0.5 else "fail",
-                       "probe": f"rendered bounds moved {moved}px (requested {c['after'] - c['before']})"}
-        elif nid and p.endswith(".content"):
-            fit = ra["fit"].get(nid, {})
-            res = {"path": p, "status": "pass" if fit.get("status") in ("fits", "fitted") else "fail",
-                   "probe": f"rendered; fit={fit.get('status')} size={fit.get('size')} lines={fit.get('lines')}"}
-        elif nid and p.endswith(".asset"):
-            b = (ra["bounds"].get(nid) or {}).get("rendered")
-            if b:
-                x, y, w, h = b
-                changed = int(np.count_nonzero(np.abs(img_a[y:y + h, x:x + w].astype(int) - img_b[y:y + h, x:x + w].astype(int)).max(axis=2)))
-                res = {"path": p, "status": "pass" if changed else "fail", "probe": f"{changed} pixels changed in the node region"}
-        elif p.startswith("tokens.") and isinstance(c["after"], str) and c["after"].startswith("#"):
-            target = [int(c["after"][i:i + 2], 16) for i in (1, 3, 5)]
-            bound = [d["path"].split(".")[1] for d in changes if d["kind"] == "dependency" and d["why"] == "bound to the edited token"]
-            hits = {}
-            for nid2 in bound:
-                b = (ra["bounds"].get(nid2) or {}).get("rendered")
-                if b:
-                    x, y, w, h = b
-                    reg = img_a[y:y + h, x:x + w].reshape(-1, 3)
-                    med = np.median(reg[np.abs(reg.astype(int) - target).max(axis=1) <= 6], axis=0) if len(reg) else None
-                    hits[nid2] = bool(med is not None and not np.isnan(med).any() and delta_e(med, target) <= 1)
-            res = {"path": p, "status": "pass" if hits and all(hits.values()) else ("unknown" if not hits else "fail"),
-                   "probe": f"new color found in bound nodes: {hits}"}
-        out.append(res)
-    return out
-
-
-def verify_change(tdir, vd, base, after, changes, mode) -> dict:
-    rb, ra = render_cached(tdir, vd, base), render_cached(tdir, vd, after)
-    authorized = {c["path"] for c in changes}
-    actual = [p for p in diff_paths(base, after) if p.split(".")[0] not in IGNORED]
-    unexplained = [p for p in actual if not any(p == a or p.startswith(a + ".") or a.startswith(p + ".") for a in authorized)]
-    v = {"property_check": {"status": "fail" if unexplained else "pass", "changed_paths": actual, "unexplained": unexplained},
-         "requested_edits": _probe_requested(base, after, changes, rb, ra),
-         "renders": {"base": rb["png"], "variant": ra["png"]}}
-    if mode == "reflow":
-        W, H = after["canvas"]["width"], after["canvas"]["height"]
-        outside = [n for n, b in ra["bounds"].items() if b["rendered"] and (b["rendered"][0] < 0 or b["rendered"][1] < 0
-                   or b["rendered"][0] + b["rendered"][2] > W or b["rendered"][1] + b["rendered"][3] > H)]
-        ro_b, ro_a = reading_order(base), reading_order(after)
-        nodes_ = [n for n in after["nodes"] if n["type"] not in ("background", "group")]
-        new_overlaps = []
-        for i, n1 in enumerate(nodes_):
-            for n2 in nodes_[i + 1:]:
-                b1, b2 = (ra["bounds"].get(n1["id"]) or {}).get("rendered"), (ra["bounds"].get(n2["id"]) or {}).get("rendered")
-                o1, o2 = (rb["bounds"].get(n1["id"]) or {}).get("rendered"), (rb["bounds"].get(n2["id"]) or {}).get("rendered")
-                if b1 and b2 and o1 and o2 and _intersects(b1, b2) and not _intersects(o1, o2):
-                    new_overlaps.append([n1["id"], n2["id"]])
-        v["reflow_preserve"] = {"target_dims": [W, H], "outside_canvas": outside, "reading_order_preserved": ro_b == ro_a,
-                                "reading_order": ro_a, "new_overlaps": new_overlaps,
-                                "text_fit": {k: x["status"] for k, x in ra["fit"].items()},
-                                "status": "pass" if not outside and ro_b == ro_a and not new_overlaps else "fail",
-                                "note": "whole-image pixel comparison across aspect ratios is not an identity test"}
-        checks = [v["property_check"]["status"], v["reflow_preserve"]["status"]]
-    else:
-        affected = sorted({c["path"].split(".")[1] for c in changes if c["path"].startswith("nodes.")})
-        W, H = after["canvas"]["width"], after["canvas"]["height"]
-        boxes = _boxes_for(affected, rb, ra)
-        whole = any(n["type"] == "background" for n in base["nodes"] if n["id"] in affected)
-        v["expected_influence"] = {"nodes": affected, "boxes": boxes, "declared_before_pixel_check": True,
-                                   "whole_canvas": whole}
-        if whole:
-            v["pixel_preservation"] = {"status": "not_applicable", "note": "whole-canvas influence; relying on property/invariant checks"}
-        else:
-            pix = outside_influence(rb["png"], ra["png"], boxes, W, H)
-            consequences = []
-            for n in after["nodes"]:
-                b = (ra["bounds"].get(n["id"]) or {}).get("rendered")
-                if n["id"] not in affected and b and n["type"] != "background" and any(_intersects(b, x) for x in boxes) \
-                        and (n.get("opacity", 1) < 1 or n.get("blend", "normal") != "normal"):
-                    consequences.append({"node": n["id"], "why": "translucent/blended node over a changed region: its visible "
-                                                                 "pixels change although its properties do not"})
-            pix["compositing_consequences"] = consequences
-            v["pixel_preservation"] = pix
-        checks = [v["property_check"]["status"], v["pixel_preservation"]["status"]]
-    checks += [r["status"] for r in v["requested_edits"]]
-    v["status"] = "fail" if "fail" in checks else ("pass_with_unknowns" if "unknown" in checks else "pass")
-    return v
+def _origin(vd, meta, base):
+    """The variant's starting model and every committed change since then (for the approved-baseline check)."""
+    if base["revision"] == meta["baseline_revision"]:
+        return None, []
+    history, rev = [], base
+    while rev["revision"] != meta["baseline_revision"]:
+        history = read_json(vd / "transactions" / f"txn-{rev['revision']:04d}.json")["changes"] + history
+        rev = read_json(rev_file(vd, rev["base_revision"]))
+    return rev, history
 
 
 def transact(tid, vid, patch, verify=True, dry_run=False) -> dict:
@@ -204,22 +87,27 @@ def transact(tid, vid, patch, verify=True, dry_run=False) -> dict:
                        "stale_base", {"head": base["revision"]})
     mode = "reflow" if any(o["op"] == "reflow" for o in patch["ops"]) else "adapt"
     nxt = max(meta["revisions"]) + 1
+    scope = patch.get("keep")
     txn = {"template": tid, "variant": vid, "base_revision": base["revision"], "revision": nxt,
-           "intent": patch.get("intent"), "ops": patch["ops"], "created": now()}
+           "intent": patch.get("intent"), "ops": patch["ops"], "scope": {"keep": scope} if scope else None, "created": now()}
     try:
         after, changes = apply_ops(base, patch["ops"], tdir)
         for aid in set(after["assets"]) - set(base["assets"]):
             changes.append({"path": f"assets.{aid}", "before": None, "after": after["assets"][aid]["sha256"],
                             "kind": "dependency", "why": "imported asset (content-hashed)", "op_index": None})
-        lock_conf, overrides = check_locks(after, [c for c in changes if not c["path"].startswith(("locks.", "assets."))])
-        con_conf, con_notes = check_constraints(base, after, mode, patch.get("relax", []))
+        # authorised set is fixed BEFORE anything is checked: requested paths + declared dependencies
+        txn["authorized_paths"] = sorted({c["path"] for c in changes})
+        lock_conf, overrides = check_locks(base, after, changes)
+        requested_nodes = {c["path"].split(".")[1] for c in changes if c["kind"] == "requested" and c["path"].startswith("nodes.")}
+        con_conf, con_notes = check_constraints(base, after, mode, patch.get("relax", []), requested_nodes)
         val = check_scene(after, tdir)
         txn.update(changes=changes, soft_lock_overrides=overrides, constraint_notes=con_notes,
                    validation={k: val[k] for k in ("errors", "warnings", "unsupported", "missing_assets", "editability")},
                    conflicts=lock_conf + con_conf + [{"validation": e} for e in val["errors"]])
         if not txn["conflicts"] and verify:
             after["revision"], after["base_revision"] = nxt, base["revision"]
-            txn["verification"] = verify_change(tdir, vd, base, after, changes, mode)
+            origin, history = _origin(vd, meta, base)
+            txn["verification"] = verify_change(tdir, vd, base, after, changes, mode, scope, origin, history + changes)
             if txn["verification"]["status"] == "fail":
                 txn["conflicts"].append({"verification": "failed", "detail": "see verification"})
     except DnaError as e:
@@ -255,13 +143,18 @@ def undo(tid, vid) -> dict:
             "restored_sha256": hashlib.sha256(rev_file(vd, parent).read_bytes()).hexdigest()}
 
 
-def export(tid, vid, formats=("png", "svg")) -> dict:
+def export(tid, vid, formats=("png", "svg"), svg_fonts="embed") -> dict:
     tdir = template_dir(tid)
     vd, meta, scene = load_variant(tid, vid)
     out = vd / "exports" / f"rev-{scene['revision']:04d}"
-    r = render(scene, tdir, out, formats=formats, name=slugify(meta["name"], 40))
+    if out.exists():
+        import datetime as _dt
+
+        out = out.with_name(f"{out.name}-{_dt.datetime.now():%Y%m%d-%H%M%S}")
+    r = render(scene, tdir, out, formats=formats, name=slugify(meta["name"], 40), svg_fonts=svg_fonts)
     write_json(out / "scene.json", scene)
-    return {"dir": str(out), "png": r["png"], "svg": r.get("svg"), "notes": r.get("export_notes", [])}
+    return {"dir": str(out), "png": r["png"], "svg": r.get("svg"), "svg_manifest": r.get("svg_manifest"),
+            "svg_verification": r.get("svg_verification"), "pin_check": r["pin_check"]}
 
 
 def main() -> int:

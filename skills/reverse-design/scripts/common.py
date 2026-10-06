@@ -25,6 +25,19 @@ SCAN_CATEGORIES = (
     "message_mechanism", "character_theme", "usage_context", "responsive_system", "output_requirements",
 )
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+# facets every complete scan must answer explicitly (status per facet; measured/observed need evidence)
+REQUIRED_FACETS = {
+    "composition": ("grid", "spacing", "alignment", "whitespace"),
+    "geometry": ("position_size", "radii_strokes", "transforms"),
+    "typography": ("text", "font_candidates", "font_identity", "size_line_height", "tracking", "baselines_alignment", "direction"),
+    "color": ("role_tokens", "gradients", "opacity_blending"),
+    "image_treatment": ("images", "crop_intent", "masks", "treatment"),
+    "depth_compositing": ("layering", "shadows", "blend_modes"),
+    "surface_texture": ("textures",),
+    "message_mechanism": ("message_delivery",),
+}
+# communication categories hold hypotheses or supplied briefs — never pixel measurements
+INTERPRETIVE = ("hierarchy_attention", "message_mechanism", "character_theme", "usage_context")
 
 
 class DnaError(Exception):
@@ -79,6 +92,15 @@ def sha256_file(p) -> str:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+VOLATILE = ("revision", "base_revision", "variant", "render_profile")
+
+
+def model_hash(scene) -> str:
+    """Content hash of a scene model, ignoring revision bookkeeping (same design = same hash)."""
+    core = {k: v for k, v in scene.items() if k not in VOLATILE}
+    return sha256_bytes(json.dumps(core, sort_keys=True, ensure_ascii=False).encode())
 
 
 def read_json(p):

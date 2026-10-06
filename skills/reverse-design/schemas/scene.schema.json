@@ -41,7 +41,7 @@
       }
     },
     "tokens": {"type": "object", "additionalProperties": {"$ref": "#/$defs/token"}},
-    "assets": {"type": "object", "additionalProperties": {"$ref": "#/$defs/asset"}},
+    "assets": {"type": "object", "propertyNames": {"$ref": "#/$defs/assetid"}, "additionalProperties": {"$ref": "#/$defs/asset"}},
     "nodes": {"type": "array", "items": {"$ref": "#/$defs/node"}},
     "constraints": {"type": "array", "items": {"$ref": "#/$defs/constraint"}},
     "slots": {"type": "array", "items": {"$ref": "#/$defs/slot"}},
@@ -63,7 +63,20 @@
           "additionalProperties": {
             "type": "object",
             "required": ["status", "note"],
-            "properties": {"status": {"$ref": "#/$defs/status"}, "note": {"type": "string"}, "evidence_ids": {"$ref": "#/$defs/ids"}}
+            "properties": {
+              "status": {"$ref": "#/$defs/status"}, "note": {"type": "string"}, "evidence_ids": {"$ref": "#/$defs/ids"},
+              "confidence": {"$ref": "#/$defs/confidence"},
+              "ambiguity": {"type": "array", "items": {"type": "string"}, "description": "unresolved alternatives"},
+              "facets": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "required": ["status", "note"],
+                  "properties": {"status": {"$ref": "#/$defs/status"}, "note": {"type": "string"}, "evidence_ids": {"$ref": "#/$defs/ids"},
+                                 "confidence": {"$ref": "#/$defs/confidence"}, "ambiguity": {"type": "array", "items": {"type": "string"}}}
+                }
+              }
+            }
           }
         }
       }
@@ -86,6 +99,8 @@
   "$defs": {
     "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
     "ids": {"type": "array", "items": {"type": "string"}},
+    "assetid": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "otag": {"type": "string", "pattern": "^[A-Za-z0-9 ]{4}$"},
     "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "status": {"enum": ["observed", "measured", "inferred", "unknown", "not_applicable"]},
     "confidence": {"enum": ["high", "medium", "low", "unassessed"]},
@@ -153,8 +168,8 @@
       "type": "object",
       "required": ["id", "path", "sha256", "kind", "source"],
       "properties": {
-        "id": {"type": "string"},
-        "path": {"type": "string", "pattern": "^assets/[^/\\\\]+$"},
+        "id": {"$ref": "#/$defs/assetid"},
+        "path": {"type": "string", "pattern": "^assets/[A-Za-z0-9._-]+$"},
         "sha256": {"$ref": "#/$defs/sha"},
         "kind": {"enum": ["image", "font", "mask", "texture"]},
         "source": {"enum": ["reference_crop", "supplied", "generated", "synthetic_fixture", "system_font", "source_extraction"]},
@@ -180,13 +195,13 @@
       "type": "object",
       "properties": {
         "token": {"type": "string"},
-        "asset": {"type": ["string", "null"]},
-        "family": {"type": "string"},
+        "asset": {"anyOf": [{"$ref": "#/$defs/assetid"}, {"type": "null"}]},
+        "family": {"type": "string", "pattern": "^[^<>\"&;{}]*$"},
         "weight": {"type": "number"},
         "style": {"enum": ["normal", "italic"]},
         "size": {"type": "number", "exclusiveMinimum": 0},
-        "features": {"type": "object", "additionalProperties": {"type": "integer"}},
-        "variation": {"type": "object", "additionalProperties": {"type": "number"}},
+        "features": {"type": "object", "propertyNames": {"$ref": "#/$defs/otag"}, "additionalProperties": {"type": "integer"}},
+        "variation": {"type": "object", "propertyNames": {"$ref": "#/$defs/otag"}, "additionalProperties": {"type": "number"}},
         "horizontal_scale": {"type": "number"},
         "synthetic": {"type": "object", "properties": {"bold": {"type": "boolean"}, "italic": {"type": "boolean"}}},
         "identity": {
@@ -223,7 +238,7 @@
         "type": {"enum": ["rect", "ellipse", "path", "asset"]},
         "radius": {"type": "number", "minimum": 0},
         "d": {"type": "string"}, "box": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
-        "asset": {"type": "string"}, "mode": {"enum": ["alpha", "luminance"]},
+        "asset": {"$ref": "#/$defs/assetid"}, "mode": {"enum": ["alpha", "luminance"]},
         "feather": {"type": "number", "minimum": 0}
       }
     },
@@ -245,7 +260,8 @@
         "spread": {"type": "number", "minimum": 0},
         "color": {"$ref": "#/$defs/color"},
         "opacity": {"type": "number", "minimum": 0, "maximum": 1},
-        "blend": {"type": "string"},
+        "blend": {"enum": ["normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn", "hard-light",
+                           "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity"]},
         "receiver": {"type": "string"}
       }
     },
@@ -279,7 +295,7 @@
         "line_height": {"type": "number", "exclusiveMinimum": 0},
         "tracking": {"type": "number", "description": "letter-spacing in px"},
         "fit": {"$ref": "#/$defs/fit"},
-        "asset": {"type": ["string", "null"]},
+        "asset": {"anyOf": [{"$ref": "#/$defs/assetid"}, {"type": "null"}]},
         "placement": {"$ref": "#/$defs/placement"},
         "mask": {"$ref": "#/$defs/mask"},
         "treatment": {"type": "array", "items": {"$ref": "#/$defs/treatment"}},

@@ -13,8 +13,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import (SCAN_CATEGORIES, SCHEMA_DIR, DnaError, font_cmap, load_evidence, node_map,  # noqa: E402
-                    read_json, safe_path, sha256_file, template_dir)
+from common import (INTERPRETIVE, REQUIRED_FACETS, SCAN_CATEGORIES, SCHEMA_DIR, DnaError, font_cmap,  # noqa: E402
+                    load_evidence, node_map, read_json, safe_path, sha256_file, template_dir)
 
 SUPPORTED = {
     "treatment": {"grayscale", "saturate", "contrast", "brightness", "hue_rotate", "tint", "blur"},
@@ -24,6 +24,8 @@ SUPPORTED = {
 }
 ARABIC = re.compile("[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]")
 SHORTCUT_COVERAGE = 0.5  # a reference-derived raster covering >= half the canvas cannot back an editable claim
+ASSEMBLY_COVERAGE = 0.9  # reference crops that TOGETHER cover the page are a bitmap assembly, whatever their size
+BAKED_OVERLAP = 0.25     # a reference crop covering >25% of another element's box carries that element baked in
 
 
 def schema_errors(instance, schema_name: str) -> list[str]:
@@ -55,25 +57,60 @@ def resolved_font(scene, node) -> dict:
     return f
 
 
+def _area(g, W, H):
+    return max(0, min(g["x"] + g["w"], W) - max(g["x"], 0)) * max(0, min(g["y"] + g["h"], H) - max(g["y"], 0))
+
+
+def _overlap(a, b):
+    return max(0, min(a["x"] + a["w"], b["x"] + b["w"]) - max(a["x"], b["x"])) * max(0, min(a["y"] + a["h"], b["y"] + b["h"]) - max(a["y"], b["y"]))
+
+
 def editability_report(scene) -> dict:
+    """pass only when every slot is independently editable. An empty inventory is `incomplete`, never a pass.
+    Reference-derived rasters fail editability when one covers >= 50% of the canvas, when together they cover
+    >= 90% (page assembly from fragments), or when one contains another element's box (content baked in)."""
+    import numpy as np
+
     W, H = scene["canvas"]["width"], scene["canvas"]["height"]
     src = scene["source"]["sha256"]
     assets, nodes = scene["assets"], node_map(scene)
-    shortcut = []
+    if not scene["nodes"] or not scene["slots"]:
+        return {"overall": "incomplete", "slots": {}, "reference_background_shortcut": [], "baked_content": [],
+                "rule": "no element inventory or no replaceable slots: editability cannot be claimed"}
+    shortcut, refs = [], []
     for n in scene["nodes"]:
         a = assets.get(n.get("asset") or "")
         if not a or n["type"] not in ("image", "background"):
             continue
-        g = n["geometry"]
-        cov = max(0, min(g["x"] + g["w"], W) - max(g["x"], 0)) * max(0, min(g["y"] + g["h"], H) - max(g["y"], 0)) / (W * H)
+        g = n["geometry"] if n["type"] == "image" else {"x": 0, "y": 0, "w": W, "h": H}
         from_ref = a["sha256"] == src or a.get("derived_from", {}).get("sha256") == src or a["source"] == "reference_crop"
-        if from_ref and cov >= SHORTCUT_COVERAGE:
-            shortcut.append({"node": n["id"], "coverage": round(cov, 3)})
+        if from_ref:
+            refs.append((n, g))
+            cov = _area(g, W, H) / (W * H)
+            if cov >= SHORTCUT_COVERAGE:
+                shortcut.append({"node": n["id"], "coverage": round(cov, 3), "why": "single reference bitmap"})
+    if refs:
+        grid = np.zeros((int(H) // 4 + 1, int(W) // 4 + 1), bool)
+        for _, g in refs:
+            grid[max(0, int(g["y"]) // 4):max(0, int(g["y"] + g["h"]) // 4), max(0, int(g["x"]) // 4):max(0, int(g["x"] + g["w"]) // 4)] = True
+        union = float(grid.mean())
+        if union >= ASSEMBLY_COVERAGE and not shortcut:
+            shortcut.append({"node": ",".join(n["id"] for n, _ in refs), "coverage": round(union, 3), "why": "page assembled from reference fragments"})
+    baked = []
+    for rn, rg in refs:
+        for m in scene["nodes"]:
+            if m["id"] == rn["id"] or m["type"] in ("background", "group", "image") or not m.get("visible", True):
+                continue
+            mg = m["geometry"]
+            if mg["w"] * mg["h"] and _overlap(rg, mg) / (mg["w"] * mg["h"]) > BAKED_OVERLAP:
+                baked.append({"raster": rn["id"], "contains": m["id"]})
     slots = {}
     for s in scene["slots"]:
         n = nodes.get(s["node"])
         if n is None:
             slots[s["id"]] = "fail: slot node missing"
+        elif any(b["contains"] == n["id"] for b in baked):
+            slots[s["id"]] = "fail: the element's pixels are baked into reference raster " + next(b["raster"] for b in baked if b["contains"] == n["id"])
         elif shortcut and n["id"] not in {x["node"] for x in shortcut}:
             slots[s["id"]] = "fail: old pixels remain baked into reference background " + shortcut[0]["node"]
         elif s["type"] == "text":
@@ -87,9 +124,27 @@ def editability_report(scene) -> dict:
         else:
             slots[s["id"]] = "live"
     bad = [k for k, v in slots.items() if v.startswith("fail") or "not live" in v]
-    overall = "fail" if shortcut else ("pass" if not bad else "partial")
-    return {"overall": overall, "slots": slots, "reference_background_shortcut": shortcut,
-            "rule": f"reference-derived raster covering >= {SHORTCUT_COVERAGE:.0%} of canvas fails editability"}
+    overall = "fail" if shortcut or baked else ("pass" if not bad else "partial")
+    return {"overall": overall, "slots": slots, "reference_background_shortcut": shortcut, "baked_content": baked,
+            "rule": f"reference rasters: one >= {SHORTCUT_COVERAGE:.0%} of the canvas, together >= {ASSEMBLY_COVERAGE:.0%}, or containing "
+                    f"another element (> {BAKED_OVERLAP:.0%} of its box) fail editability"}
+
+
+PASSPORT_REQUIRED = {"name": "name", "character": "character", "goal": "goal", "theme": "theme", "usage": "suitable uses",
+                     "literal_message": "message", "mechanism": "how it delivers the message"}
+
+
+def passport_report(passport) -> dict:
+    """A template passport must explain name, character, goal, theme, suitable uses, message and its delivery.
+    Claude's own suggestions are allowed but must be labelled (status suggested / inferred)."""
+    missing, unlabelled = [], []
+    for key, label in PASSPORT_REQUIRED.items():
+        v = passport.get(key)
+        if v in (None, "", {}) or (isinstance(v, dict) and v.get("value") in (None, "", [])):
+            missing.append(label)
+        elif key != "name" and (not isinstance(v, dict) or "status" not in v):
+            unlabelled.append(label)
+    return {"complete": not missing and not unlabelled, "missing": missing, "unlabelled": unlabelled}
 
 
 def check_scene(scene, tdir, verify_hashes: bool = True) -> dict:
@@ -147,6 +202,8 @@ def check_scene(scene, tdir, verify_hashes: bool = True) -> dict:
                 unsupported.append({"node": n["id"], "feature": f"effect:{fx['type']}"})
         if n["type"] == "effect" and n["effect"]["kind"] not in SUPPORTED["effect_node"]:
             unsupported.append({"node": n["id"], "feature": f"effect_node:{n['effect']['kind']}"})
+        if n.get("stroke") and n["type"] not in ("text", "shape", "path"):
+            unsupported.append({"node": n["id"], "feature": f"stroke_on_{n['type']}"})
         if (n.get("stroke") or {}).get("align", "center") not in SUPPORTED["stroke_align"]:
             unsupported.append({"node": n["id"], "feature": f"stroke_align:{n['stroke']['align']}"})
         if (n.get("mask") or {}).get("type") == "asset" and (n.get("mask") or {}).get("feather"):
@@ -175,11 +232,42 @@ def check_scene(scene, tdir, verify_hashes: bool = True) -> dict:
                 warnings.append(f"{n['id']}: Arabic content with direction {n.get('direction', 'ltr')!r}")
         if (f.get("identity") or {}).get("status", "unknown") == "unknown":
             warnings.append(f"{n['id']}: font identity unknown (rendering a candidate)")
-    # scan coverage
+    # slots: declared limits and allowed treatments are enforced, not just documented
+    for sl in scene["slots"]:
+        n = nodes.get(sl["node"])
+        if not n:
+            continue
+        lim = sl.get("limits") or {}
+        if n["type"] == "text":
+            chars = len(n["content"].replace("\n", ""))
+            if lim.get("max_chars") and chars > lim["max_chars"]:
+                errors.append(f"slot {sl['id']}: {chars} characters exceed max_chars {lim['max_chars']}")
+            if lim.get("max_lines") and n["content"].count("\n") + 1 > lim["max_lines"]:
+                errors.append(f"slot {sl['id']}: {n['content'].count(chr(10)) + 1} lines exceed max_lines {lim['max_lines']}")
+        if sl.get("treatments_allowed") is not None:
+            bad = [t["op"] for t in n.get("treatment", []) if t["op"] not in sl["treatments_allowed"]]
+            if bad:
+                errors.append(f"slot {sl['id']}: treatments {bad} not in treatments_allowed {sl['treatments_allowed']}")
+    # scan coverage: 16 categories, required facets, a source for every observed/measured finding,
+    # and no "measured" communication claims (hypotheses stay hypotheses)
     cov = scene["scan"]["coverage"]
+    complete = scene["scan"]["state"] == "complete"
+    sink = errors if complete else warnings
     absent = [c for c in SCAN_CATEGORIES if c not in cov]
     if absent:
-        (errors if scene["scan"]["state"] == "complete" else warnings).append(f"scan categories without a result: {absent}")
+        sink.append(f"scan categories without a result: {absent}")
+    for cat, entry in cov.items():
+        if cat in INTERPRETIVE and entry["status"] == "measured":
+            errors.append(f"coverage.{cat}: communication findings cannot be 'measured' (use observed for a supplied brief, else inferred)")
+        findings = [(cat, entry)] + [(f"{cat}.{k}", f) for k, f in (entry.get("facets") or {}).items()]
+        for path, f in findings:
+            if f["status"] in ("observed", "measured") and not f.get("evidence_ids"):
+                sink.append(f"coverage.{path}: {f['status']} finding has no evidence source")
+            if f["status"] == "inferred" and not f.get("confidence"):
+                sink.append(f"coverage.{path}: inferred finding has no confidence")
+        absent_facets = [k for k in REQUIRED_FACETS.get(cat, ()) if k not in (entry.get("facets") or {})]
+        if absent_facets and entry["status"] != "not_applicable":
+            sink.append(f"coverage.{cat}: facets without a result: {absent_facets}")
     return {"valid": not errors, "errors": errors, "warnings": warnings, "unsupported": unsupported,
             "missing_assets": missing, "editability": editability_report(scene)}
 
@@ -198,6 +286,10 @@ def main() -> int:
             errs = schema_errors(read_json(tdir / extra), schema)
             rep["errors"] += [f"{extra}: {e}" for e in errs]
             rep["valid"] = rep["valid"] and not errs
+    if (tdir / "passport.json").exists():
+        rep["passport"] = passport_report(read_json(tdir / "passport.json"))
+        if not rep["passport"]["complete"]:
+            rep["warnings"].append(f"passport incomplete: missing {rep['passport']['missing']}, unlabelled {rep['passport']['unlabelled']}")
     if a.json:
         print(json.dumps(rep, indent=2, ensure_ascii=False))
     else:

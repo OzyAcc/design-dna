@@ -1,9 +1,13 @@
 # Scene model, template passport, store layout
 
 Schemas: `schemas/scene.schema.json` (model), `template.schema.json` (passport), `evidence.schema.json`,
-`patch.schema.json`. Version `1.0.0`; a future version adds a migration in `common.py` and bumps `schema_version`.
+`patch.schema.json`, `bundle.schema.json`. Version `1.0.0`; a future version adds a migration in `common.py` and
+bumps `schema_version`.
 
-## Store layout (outside the skill; default `~/design-dna`, override `DESIGN_DNA_HOME`)
+## Store layout (the working store is a cache; bundles provide persistence, see `storage.md`)
+
+Default `~/design-dna`, override `DESIGN_DNA_HOME`. Asset ids match `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`
+(content-hash ids `a-<sha12>` by default); OpenType feature/axis tags match `^[A-Za-z0-9 ]{4}$`.
 
 ```text
 design-dna/
@@ -15,14 +19,20 @@ design-dna/
     evidence/evidence.json        evidence records; crops/, fonts/ contact sheets; annotated.png; scan_report.md
     passport.json                 template identity + readiness
     scene.json                    the baseline model (revision N)
-    baseline/rev-NNNN/            baseline.png + baseline.svg master + assets/ + compare/ (metric panel, heatmap, crops)
+    baseline/rev-NNNN/            the APPROVED baseline: baseline.png + baseline.svg (+ manifest) + masks/<node>.png
+                                  + render_profile + compare/ (metric panel, heatmap, crops); never overwritten
+    baseline/rev-NNNN-rerun-<ts>/ reproducibility re-runs;  rev-NNNN-migration-<ts>/ renderer-migration candidates
     variants/<variant-id>/
       variant.json                name, task, head, revision list, history, inherited limitations
       revisions/rev-NNNN.json     immutable scene per committed revision (base_revision = parent)
-      transactions/txn-NNNN.json  ops, change records, locks/constraints results, verification
+      transactions/txn-NNNN.json  ops, change records (requested / dependency / visual / note), relaxed
+                                  constraints, locks, verification (vs previous revision AND vs approved baseline)
       rejected/txn-<time>.json    rejected transactions with conflicts + options
-      renders/<scene-hash>/       render cache keyed by scene content (never reused for another scene)
-      exports/rev-NNNN/           PNG + SVG master + assets + scene.json
+      renders/<key>/              render cache; key = scene content + tool version + renderer fingerprint;
+                                  a hit is re-checked (files, png sha, masks, renderer) before reuse
+      exports/rev-NNNN[-<ts>]/    PNG + self-contained SVG + .svg.manifest.json + scene.json (never overwritten)
+
+Bundles (`<id>@<ts>.dnab`) are written wherever `export-template … to <dir>` points, which can be outside the store.
 ```
 
 ## Scene (top level)
@@ -76,7 +86,9 @@ id, name (+ `name_status`: user_supplied / suggested / user_confirmed), aliases,
 unsuitable_for, audience_assumptions (each `{value, status}`; Claude's guesses are `suggested`/`inferred`),
 visual_signature, aspect_ratio, slots, constraints_summary, editability_coverage, unresolved, baseline_match
 `{profile, status, report, how: copying|asset_reuse|editable_rendering|mixed}`, brand_association (only when the
-user supplies it), fixture flag.
+user supplies it), fixture flag, **render_pin** (the renderer environment at approval; hard fields stop work on
+drift), **baseline_render** (path, sha256, revision, model content hash and renderer of the approved baseline),
+**render_migrations** (confirmed renderer changes with pixel differences), **imports** (bundle provenance).
 
 Readiness = the highest level the saved baseline actually passed:
 `scan_in_progress → scanned → partial_baseline (rendered, failed or incomplete) → editable_close → exact_pixels`.
