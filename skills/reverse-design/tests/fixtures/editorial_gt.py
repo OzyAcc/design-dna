@@ -14,7 +14,7 @@ sys.path.insert(0, str(SCRIPTS))
 from common import add_evidence, import_asset, read_json, template_dir, write_json  # noqa: E402
 from inspect_source import create_template  # noqa: E402
 
-FONTS = Path("C:/Windows/Fonts")
+import fontset  # noqa: E402
 
 
 def claim(v, status="observed", conf="high"):
@@ -23,8 +23,8 @@ def claim(v, status="observed", conf="high"):
 
 def gt_scene(scene, tdir, fx: Path) -> dict:
     bag = import_asset(tdir, fx / "bag.png", "image", "synthetic_fixture")
-    serif = import_asset(tdir, FONTS / "georgiab.ttf", "font", "system_font")
-    sans = import_asset(tdir, FONTS / "arialbd.ttf", "font", "system_font")
+    serif = import_asset(tdir, fontset.path("serif"), "font", fontset.source())
+    sans = import_asset(tdir, fontset.path("sans"), "font", fontset.source())
     logo = json.loads((fx / "logo.json").read_text())
     known = {"*": {"status": "observed", "confidence": "high", "note": "known by construction (layered fixture)"}}
     ident = lambda a: {"status": "verified", "candidates": [a["font_names"]["full"]], "evidence_ids": []}

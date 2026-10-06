@@ -37,6 +37,7 @@ def main() -> int:
     ap.add_argument("--cols", type=int, default=3)
     ap.add_argument("--rows", type=int, default=2)
     ap.add_argument("--font", action="append", required=True, help="candidate font files to rank")
+    ap.add_argument("--font-source", default="system_font", choices=["system_font", "supplied"], help="provenance of the font files")
     a = ap.parse_args()
     tid, labels = a.template, a.labels.split(",")
     tdir = template_dir(tid)
@@ -98,7 +99,7 @@ def main() -> int:
                            "--font", best_file, "--size", seed, "--x", xs[c] + size / 2, "--baseline", caps[i]["baseline_y"],
                            "--fit", "size,x,baseline", "--align", "center", "--object", f"n-caption-{i + 1}"))
     fsize = round(statistics.median(f["params"]["size"] for f in fitted), 2)
-    font = import_asset(tdir, best_file, "font", "system_font")
+    font = import_asset(tdir, best_file, "font", a.font_source)
     add_evidence(tdir, [{"evidence_id": "ev-transcription", "source_sha256": src, "region": None, "object": "typography",
                          "method": "manual_observation", "tool": "operator reading (no OCR engine)", "value": labels,
                          "status": "observed", "confidence": "high", "justification": "short uppercase captions read at enlargement",

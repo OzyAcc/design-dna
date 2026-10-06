@@ -83,11 +83,13 @@ def grid_flattened(out: Path):
     font outside the candidate list when available, rounded photo corners, saved as lossy 4:2:0 JPEG."""
     from PIL import ImageFont
 
+    import fontset
+
     canvas = Image.new("RGB", (1080, 1080), "white")
     cols, rows, size, radius, baselines = [40, 381, 722], [105, 552], 318, 8, [485, 932]
-    face = Path("C:/Windows/Fonts/bahnschrift.ttf")
-    font = ImageFont.truetype(str(face if face.exists() else "C:/Windows/Fonts/segoeuib.ttf"), 30)
-    if face.exists():
+    face = Path(fontset.path("caption") or fontset.path("caption_fallback"))
+    font = ImageFont.truetype(str(face), 30)
+    if face.name == fontset.SETS[fontset.name()]["caption"]:
         font.set_variation_by_name("Bold")
     mask = Image.new("L", (size, size), 0)
     ImageDraw.Draw(mask).rounded_rectangle([0, 0, size - 1, size - 1], radius, fill=255)
@@ -99,7 +101,7 @@ def grid_flattened(out: Path):
     canvas.save(out / "grid_flattened.jpg", quality=82, subsampling=2)
     (out / "grid_truth.json").write_text(json.dumps({
         "labels": GRID_LABELS, "frames": [[cols[i % 3], rows[i // 3], size, size] for i in range(6)], "radius": radius,
-        "baselines": baselines, "label_font": face.name if face.exists() else "segoeuib.ttf"}), encoding="utf-8")
+        "baselines": baselines, "label_font": face.name}), encoding="utf-8")
 
 
 def main() -> int:

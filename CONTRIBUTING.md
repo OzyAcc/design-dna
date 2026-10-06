@@ -25,7 +25,7 @@ python skills/reverse-design/scripts/capabilities.py
 
 ```bash
 python -m pyflakes skills/reverse-design/scripts skills/reverse-design/tests
-python skills/reverse-design/tests/run_acceptance.py          # ~30 min, Windows (system fonts)
+python skills/reverse-design/tests/run_acceptance.py          # ~30 min; Windows system fonts, or tests/fonts elsewhere
 python skills/reverse-design/tests/run_acceptance.py --only 4,6   # a subset while iterating
 ```
 

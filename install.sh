@@ -22,5 +22,5 @@ python3 -m pip install -r "$dest/requirements.txt"
 python3 "$dest/scripts/capabilities.py" || true
 echo
 echo "If the renderer line says 'unavailable', install Google Chrome or run: python3 -m playwright install chromium"
-echo "Note: the acceptance suite uses Windows system fonts (Arial, Georgia, ...); the engine itself is cross-platform."
+echo "Note: off Windows, the acceptance suite uses the open-licensed fonts in tests/fonts (DESIGN_DNA_FONTSET=portable)."
 echo "Restart Claude Code, then ask: scan this design ..."

@@ -24,9 +24,10 @@ from inspect_source import create_template  # noqa: E402
 from render_static import render  # noqa: E402
 from validate_model import editability_report  # noqa: E402
 
-WF = "C:/Windows/Fonts/"
-SANS = [WF + f for f in ("arialbd.ttf", "verdanab.ttf", "tahomabd.ttf", "segoeuib.ttf", "calibrib.ttf", "trebucbd.ttf") if Path(WF + f).exists()]
-SERIF = [WF + f for f in ("georgiab.ttf", "timesbd.ttf", "cambriab.ttf", "constanb.ttf") if Path(WF + f).exists()]
+import fontset  # noqa: E402
+
+SANS = fontset.paths("sans_candidates")
+SERIF = fontset.paths("serif_candidates")
 
 
 def tool(script, *args):
@@ -215,7 +216,7 @@ def t01(root: Path, fx: Path, ref: Path, record):
     log["focal"] = {"shift": [sx, sy], "focal": focal}
     # author the measured scene
     scene = read_json(tdir / "scene.json")
-    fonts = {k2: import_asset(tdir, r[0]["file"], "font", "system_font") for k2, r in (("label", fl), ("head", fh), ("cta", fc))}
+    fonts = {k2: import_asset(tdir, r[0]["file"], "font", fontset.source()) for k2, r in (("label", fl), ("head", fh), ("cta", fc))}
     bag = import_asset(tdir, fx / "bag.png", "image", "supplied", note="original asset supplied with the layered source")
     lg = json.loads((fx / "logo.json").read_text())
     scene["assets"].update({a["id"]: a for a in list(fonts.values()) + [bag]})
@@ -301,12 +302,13 @@ def t01(root: Path, fx: Path, ref: Path, record):
             "saturate_err": abs(tr["saturate"] - 0.85), "contrast_err": abs(tr["contrast"] - 1.08), "focal_y_err": abs(focal[1] - 0.55),
             "sheen_alpha_err": abs(alpha - 0.35), "fonts_top": [fl[0]["name"], fh[0]["name"], fc[0]["name"]], "pixel_verdict": rep["overall"]}
     write_json(o / "scores.json", errs)
+    true_faces = [fontset.full_name(fontset.path(k)) for k in ("sans", "serif", "sans")]
     record(1, "Rebuild a known layered reference from its flattened image + supplied photo, logo and candidate fonts", {
         "geometry of shapes/frames within 1px": all(v <= 1 for v in geo.values()) or geo,
         "text baselines within 1px; x within 1px": all(v <= 1 for v in errs["baselines_px"].values()) and all(v <= 1 for v in errs["x_px"].values()) or [errs["baselines_px"], errs["x_px"]],
         "font sizes within 1.5%; line height within 1px; tracking within 0.5px": errs["label_size_pct"] <= 1.5 and errs["head_size_pct"] <= 1.5 and errs["cta_size_pct"] <= 1.5 and errs["line_height_px"] <= 1 and errs["label_tracking_px"] <= 0.5
         or {k: errs[k] for k in ("label_size_pct", "head_size_pct", "cta_size_pct", "line_height_px", "label_tracking_px")},
-        "best font candidates are the true faces (identity still unknown: no source evidence)": errs["fonts_top"] == ["Arial Bold", "Georgia Bold", "Arial Bold"] or errs["fonts_top"],
+        "best font candidates are the true faces (identity still unknown: no source evidence)": errs["fonts_top"] == true_faces or errs["fonts_top"],
         "live text content correct": rep["checks"]["typography"] and all(v["status"] == "pass" for v in rep["checks"]["typography"].values()),
         "mask radius within 2px": errs["radius_px"] <= 2 or errs["radius_px"],
         "shadow offset/blur within 1.5px; GT opacity+colour inside the measured family (±0.02)": errs["shadow_dx_px"] <= 1.5 and errs["shadow_dy_px"] <= 1.5 and errs["shadow_sigma_px"] <= 1.5 and errs["shadow_amplitude_max_err"] <= 0.02
@@ -326,9 +328,10 @@ def t02(root: Path, fx: Path, record):
     o.mkdir(parents=True, exist_ok=True)
     truth = json.loads((fx / "grid_truth.json").read_text())
     tid = create_template(fx / "grid_flattened.jpg", "Product Grid Six-Up", "user_supplied")["template_id"]
-    cands = [f for f in SANS + [WF + "corbelb.ttf", WF + "GOTHICB.TTF"] if Path(f).exists()]
+    cands = SANS + fontset.paths("grid_extra_candidates")
     r = subprocess.run([sys.executable, str(HERE / "fixtures" / "operator_grid.py"), tid, "--labels", ",".join(truth["labels"]),
-                        "--cols", "3", "--rows", "2", *sum([["--font", f] for f in cands], [])], capture_output=True, text=True)
+                        "--cols", "3", "--rows", "2", "--font-source", fontset.source(), *sum([["--font", f] for f in cands], [])],
+                       capture_output=True, text=True)
     if r.returncode:
         raise RuntimeError(f"operator_grid.py failed: {r.stdout[-600:]} {r.stderr[-600:]}")
     got = json.loads(r.stdout[r.stdout.index("{"):])

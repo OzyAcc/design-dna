@@ -127,7 +127,7 @@ All artwork is synthetic (generated fixtures); no third-party or client material
 
 | Folder | Contents |
 |---|---|
-| `templates/` | Template bundles (`.dnab`) exported from the run's store with `fonts=reference`: no font binaries. Import with `python skills/reverse-design/scripts/bundle.py import <file>`; the fonts resolve by sha256 from your font folders (the fixtures use Windows system fonts). Validation tells you which font is missing if one does not resolve. |
+| `templates/` | Template bundles (`.dnab`) exported from the run's store with `fonts=reference`: no font binaries. Import with `python skills/reverse-design/scripts/bundle.py import <file>`; the fonts resolve by sha256 from your font folders, or pass `--font-dir` (a Windows run used Windows system fonts; a portable run used `skills/reverse-design/tests/fonts`, see `acceptance/report.json` → `setup.fonts`). Validation tells you which font is missing if one does not resolve. |
 | `acceptance/report.md` | The actual acceptance report, grouped by kind. `report.json` has every assertion. |
 | `acceptance/t01-…` | Measured rebuild: comparison panel (`compare/`: side-by-side, overlay, heatmap, region crops, `report.json`) and `scores.json` against hidden ground truth |
 | `acceptance/t02-…` | Unfamiliar flattened JPEG: annotated scan and the honest partial result |
