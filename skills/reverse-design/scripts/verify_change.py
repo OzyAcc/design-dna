@@ -211,8 +211,13 @@ def visual_changes(base_png, cand_png, rb, ra, affected, after, out_png) -> dict
     viz[changed & ~infl] = [255, 0, 0]
     Image.fromarray(viz).save(out_png)
     outside = int(np.count_nonzero(changed & ~infl))
+    where = []
+    for y, x in list(zip(*np.nonzero(changed & ~infl)))[:8]:  # name them: a count alone cannot be acted on
+        under = [n["id"] for n in after["nodes"] if n["type"] not in ("background", "group")
+                 and (_mask(ra, n["id"], (H, W))[y, x] or _mask(rb, n["id"], (H, W))[y, x])]
+        where.append(f"({x},{y}) {tuple(int(v) for v in a[y, x])}->{tuple(int(v) for v in b[y, x])} {'/'.join(under) or 'background'}")
     return {"changed_pixels": int(changed.sum()), "inside_influence": int(np.count_nonzero(changed & infl)),
-            "outside_influence": outside,
+            "outside_influence": outside, "outside_where": "; ".join(where),
             "influence": {"method": "union of per-node alpha masks (before + after) of edited nodes and dependencies, dilated "
                                     f"{DILATE_PX}px; declared before the pixel comparison", "nodes": affected,
                           "fraction": float(infl.mean()), "whole_canvas": whole},

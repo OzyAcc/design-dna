@@ -9,6 +9,10 @@ Design DNA installs in every AI tool that can load it, starting with ChatGPT, fr
 the acceptance suite runs off Windows (the first open item of the audit response).
 
 ### Added
+- Pixel differences are located, not just counted: a refused edit's `visual_changes.outside_where`, the SVG
+  round-trip, the approved-baseline re-run check and `compare_render`'s exact-pixel check now list the first
+  differing pixels with their before/after values (and, for edits, the element under each).
+- T10 renders the model 8 times in fresh browser launches instead of twice, and names any differing pixel.
 - **Choose your AI tool**: ChatGPT (Skills upload for Business, Enterprise, Healthcare and Edu; Codex for every
   plan; a labelled instruction kit for Free, Plus and Pro), Codex, Claude Code, the Claude apps, Cursor, GitHub
   Copilot, Gemini CLI, Windsurf, Cline, Roo Code, OpenCode, Kiro, Junie, Goose, any host reading `.agents/skills`,

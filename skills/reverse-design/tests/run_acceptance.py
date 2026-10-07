@@ -32,7 +32,7 @@ import dna  # noqa: E402
 from apply_patch import load_variant  # noqa: E402
 from verify_change import render_cached  # noqa: E402
 from common import DnaError, import_asset, read_json, sha256_file, template_dir, write_json  # noqa: E402
-from compare_render import compare, decode, pixel_metrics  # noqa: E402
+from compare_render import compare, decode, diff_where, pixel_metrics  # noqa: E402
 from editorial_gt import build_gt  # noqa: E402
 import crash  # noqa: E402
 import fontset  # noqa: E402
@@ -308,6 +308,9 @@ def t09_reflow():
     }, [o / "reflow-1080x1920.png", o / "transaction.json"])
 
 
+RENDER_RUNS = 8
+
+
 def t10_determinism():
     o = out(10, "determinism")
     tid = "editorial-product-spotlight"
@@ -316,16 +319,22 @@ def t10_determinism():
     scene["nodes"].append({"id": "n-grain", "alias": "grain", "type": "effect", "role": "texture", "parent": None, "opacity": 0.06,
                            "blend": "overlay", "effect": {"kind": "grain", "seed": 7, "frequency": 0.9},
                            "geometry": {"x": 0, "y": 0, "w": 1080, "h": 1350}})
-    a = render(scene, tdir, o / "a", name="render")
-    b = render(scene, tdir, o / "b", name="render")
-    pa, pb = decode(a["png"])[0], decode(b["png"])[0]
-    pm = pixel_metrics(pa, pb)
-    (o / "result.json").write_text(json.dumps({"metrics": pm, "png_bytes_equal": a["png_sha256"] == b["png_sha256"],
-                                               "render_profile": a["render_profile"]}, indent=2), encoding="utf-8")
-    record(10, "Same saved model rendered twice (incl. seeded grain) is pixel-identical", {
-        "decoded pixels identical": pm["unequal_pixels"] == 0 or pm,
-        "png bytes identical (stronger than required)": a["png_sha256"] == b["png_sha256"] or "decode-identical; encoder bytes differ",
-    }, [o / "a" / "render.png", o / "result.json"])
+    # several fresh browser launches, not two: a rare rasterisation difference must show up here, located
+    runs = [render(scene, tdir, o / f"r{i}", name="render") for i in range(RENDER_RUNS)]
+    first = decode(runs[0]["png"])[0]
+    diffs = {}
+    for i, r in enumerate(runs[1:], 1):
+        other = decode(r["png"])[0]
+        pm = pixel_metrics(first, other)
+        if pm["unequal_pixels"]:
+            diffs[f"r{i}"] = {"unequal_pixels": pm["unequal_pixels"], "where": diff_where(first, other)}
+    same_bytes = len({r["png_sha256"] for r in runs}) == 1
+    (o / "result.json").write_text(json.dumps({"runs": RENDER_RUNS, "differences_vs_first": diffs, "png_bytes_equal": same_bytes,
+                                               "render_profile": runs[0]["render_profile"]}, indent=2), encoding="utf-8")
+    record(10, f"Same saved model rendered {RENDER_RUNS} times in fresh browser launches (incl. seeded grain) is pixel-identical", {
+        "decoded pixels identical": not diffs or diffs,
+        "png bytes identical (stronger than required)": same_bytes or "decode-identical; encoder bytes differ",
+    }, [o / "r0" / "render.png", o / "result.json"])
 
 
 def t11_undo_reload(tid, vid, rev):
@@ -456,6 +465,8 @@ def main() -> int:
     print(f"font set: {fontset.name()} ({fontset.font_dir().as_posix()})")
     gt, ref, rec = setup()
     print(f"setup: baseline readiness {rec['readiness']} ({rec['verdict']['status']})")
+    if rec["verdict"]["status"] != "pass":  # everything after builds on this baseline: say where it differs
+        print("    exact_pixels:", {k: v for k, v in read_json(rec["report"])["checks"]["exact_pixels"].items() if k in ("unequal_pixels", "where")})
     steps = [(3, lambda: t03_duplicate_fonts(ref)), (4, t04_headline_only), (5, t05_hero_replace), (6, t06_token),
              (7, t07_impossible_fit), (8, t08_arabic), (9, t09_reflow), (10, t10_determinism), (12, t12_unsupported_missing),
              (13, lambda: t13_shortcut(ref)), (14, t14_small_errors)]
