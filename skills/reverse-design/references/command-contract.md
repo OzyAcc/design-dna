@@ -15,10 +15,10 @@ python <skill-dir>/scripts/dna.py '<command>'
 | inspect | `inspect "<T>" aspect <category\|all>` | coverage entry (+ facets, ambiguity) and evidence for one of the 16 categories |
 | explain | `explain "<T>" message` | communication chains with status labels |
 | reconstruct | `reconstruct "<T>" mode editable\|exact` | render + compare vs reference; first success approves the baseline and pins the renderer; re-runs prove reproducibility |
-| migrate-baseline | `migrate-baseline "<T>" [confirm]` | render under the current (drifted) environment, compare with the approved baseline + reference; `confirm` adopts it and records the migration |
+| migrate-baseline | `migrate-baseline "<T>" [confirm preview=<preview id>]` | preview: render under the current (drifted) environment, compare with the approved baseline + reference and write an immutable `migration-preview.json` (`preview_id`, base revision + model hash, old pin + hash, approved baseline hash, candidate PNG hash, new renderer fingerprint). `confirm preview=<id>` adopts exactly that reviewed candidate; it is refused if anything it was bound to has changed (`stale_preview`, `changed_candidate`), if the id is unknown or already used (`unknown_preview`, `preview_already_confirmed`) or missing (`preview_required`). A legacy pin missing a hard field (`text_rendering`, added in 2.1) is drift that needs this decision, never a silent match |
 | use | `use "<T>" for task "<task>" [as "<variant name>"]` | new working variant from the approved model |
 | set | `set <path> = <JSON value>` | typed property edit (`"text\nmore"`, `0.16`, `{"policy":"fit"}`) |
-| replace | `replace <node>.asset with <file> [preserve treatment,crop-intent,anchor,mask,effects] [baked=cast_shadow]` | new asset, same placement/treatment/mask/effects |
+| replace | `replace <node>.asset with <file> [preserve treatment,crop-intent,anchor,mask,effects] [baked=cast_shadow]` | new asset, same placement/treatment/mask/effects. In a typed patch, `"source": "generated"` records a synthesized image as generated (default `supplied`) |
 | move | `move <node> by x=<n>px y=<n>px` | geometry (+ baseline, + group descendants) |
 | resize | `resize <node> to w=<n>px h=<n>px [anchor=center\|top-left…]` | frame size; text size unchanged |
 | remove | `remove <node> [force]` | refuses if it backs a slot unless `force` |

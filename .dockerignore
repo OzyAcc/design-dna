@@ -11,3 +11,4 @@ docs/*
 !docs/images
 docs/images/evidence
 *.log
+docs/images/dashboard

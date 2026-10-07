@@ -109,6 +109,23 @@ Download links point at the latest release. Until a release carries them, build 
 
 Full list: [CHANGELOG.md](CHANGELOG.md).
 
+## Dashboard (web app)
+
+`dashboard/` turns the engine into a template library you use in a browser. You turn designs you like into
+measured templates, copy and edit them with verified changes, and generate product outputs in batches, each with its
+own copy. It has a durable worker, optional Claude and OpenAI image providers, and container setup.
+
+```bash
+python -m pip install -r dashboard/requirements.txt && python -m playwright install chromium
+(cd dashboard/web && npm ci && npm run build)
+cd dashboard/server && python -m dna_dashboard all     # http://127.0.0.1:8765
+```
+
+Setup and the user guide: [dashboard/README.md](dashboard/README.md). What works, with evidence:
+[docs/DASHBOARD-REPORT.md](docs/DASHBOARD-REPORT.md).
+
+<img src="docs/images/dashboard/08-batch-composer.png" alt="Dashboard batch composer: three products by two templates, each output with its own copy" width="100%">
+
 ## Quick start
 
 **Any local AI tool** (Python 3.10+):
@@ -282,7 +299,7 @@ reflow canvas=1080x1920 preserve margins-ratio,reading-order
 export formats=png,svg
 export-template "Editorial Product Spotlight" to D:/design-library
 fetch "Editorial Product Spotlight" from D:/design-library
-migrate-baseline "Editorial Product Spotlight"
+migrate-baseline "Editorial Product Spotlight"          # then: … confirm preview=<preview id>
 undo last
 save as "Everyday Bag — Yellow Variant"
 ```
@@ -315,6 +332,7 @@ design-dna/
 │   ├── schemas/                 scene · evidence · template · patch · bundle (JSON Schema 2020-12)
 │   ├── scripts/                 engine: intake, measurement, render, compare, transactions, bundles, CLI
 │   └── tests/                   acceptance suite, audit regressions, deterministic fixtures
+├── dashboard/                   web app: server/ (FastAPI API + worker), web/ (React), tests/, Dockerfile, compose
 ├── hosts/                       host registry, overlays, package generator, installer tests (install.py uses it)
 ├── docs/                        BUILD-REPORT, AUDIT-RESPONSE, hosts/ (one guide per AI tool), SPEC, images
 ├── install.py · install.sh · install.ps1   one installer for every AI tool (the scripts wrap install.py)

@@ -92,7 +92,7 @@ verified, what remains unresolved, and the next commands.
 | "Arabic version" | `adapt language=ar headline="…" font="<Arabic-capable font file>"` (missing glyphs and tracked Arabic are rejected) |
 | "make it a story" | `reflow canvas=1080x1920 preserve margins-ratio,reading-order` |
 | "save this template" / "open it elsewhere" | `export-template "<Name>" to <folder>` · `fetch "<Name>" from <folder>` |
-| "the browser changed" | `migrate-baseline "<Name>"` (review) then `migrate-baseline "<Name>" confirm` |
+| "the browser changed" | `migrate-baseline "<Name>"` (review the preview) then `migrate-baseline "<Name>" confirm preview=<preview id>` |
 | "undo that" / "save it as X" | `undo last` · `save as "X"` |
 
 `keep everything else` never adds persistent locks and never removes existing ones: an explicit lock on what you
@@ -100,8 +100,8 @@ want to change is a conflict until you `unlock` it.
 
 ## Verification
 
-In the repository (installed copies leave the suite out): `tests/run_acceptance.py` runs 32 checks in an
-isolated store: 22 demonstrations plus 10 audit regressions. A 33rd entry, host-storage integration, is explicitly
+In the repository (installed copies leave the suite out): `tests/run_acceptance.py` runs 36 checks in an
+isolated store: 22 demonstrations plus 14 audit regressions. A further entry, host-storage integration, is explicitly
 marked unverified. The run writes `report.md` (results grouped by kind) with the inputs and outputs it kept. Re-run
 it after changing any script. `CAPABILITIES.md` at the repository root lists what is implemented, tested, partial
 or unsupported; `docs/hosts/COMPATIBILITY.md` lists every AI tool this skill installs into and what was tested there.

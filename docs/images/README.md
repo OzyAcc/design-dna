@@ -25,3 +25,10 @@ The original v1.0.0 acceptance screenshots are retained byte-for-byte in
 `docs/images/evidence/latest/`, so regenerating evidence does not overwrite these
 README illustrations. The repository's acceptance suite and build report remain
 the sources for measured claims.
+
+## Dashboard screenshots
+
+`dashboard/` holds real screenshots of the web app, not illustrations. `dashboard/tests/screenshots.py` builds them
+from a fresh workspace: synthetic, unbranded fixtures (the test poster and simple product photos), no provider
+keys, and the mock providers switched off. Each picture shows what the app actually displayed. The engine's reports
+and the output files, not these pictures, are the evidence for rendering and preservation.

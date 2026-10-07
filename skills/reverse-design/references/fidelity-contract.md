@@ -70,7 +70,8 @@ percentage.
 `exact_pixels` / `editable_close` are granted only when the profile passes **and** the scan is complete **and**
 editability passes. Anything else is `partial_baseline` with the reasons written to `unresolved`. The first
 reconstruct of a model approves its baseline and pins the renderer; later runs prove reproducibility into new
-folders; nothing approved is overwritten. A renderer change needs `migrate-baseline … confirm`.
+folders; nothing approved is overwritten. A renderer change needs `migrate-baseline … confirm preview=<id>`, bound to
+the exact reviewed candidate. A pin recorded before a hard field existed is drift, not a match.
 
 ## Correction loop
 
@@ -92,3 +93,6 @@ Isolated store per run, outputs retained per test, `report.md` + `report.json`, 
   renderer drift + migration; exported SVG rendered and checked.
 - **23:** host persistent storage adapter — UNVERIFIED.
 - **24–33:** regressions for every finding of the 2026-10-06 audit (`docs/AUDIT-RESPONSE.md`).
+- **34–37:** regressions for the dashboard build audit: legacy pins need a decision (A1), migration confirmation is
+  bound to the reviewed preview (A3), repeated fresh-process renders are identical (A2), hidden nodes don't break
+  isolated-bounds checks.

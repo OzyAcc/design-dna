@@ -38,7 +38,8 @@ Every row is one of:
 | Arabic shaping, bidi, glyph coverage | implemented + tested | T08 T17 | missing glyphs and tracked Arabic are errors |
 | Text stroke (centre) on text, shapes, paths | implemented + tested | T31 | strokes on images, backgrounds and effect nodes are rejected |
 | Serialization safety: CSS-escaped names, escaped attributes, compiled-SVG allowlist, network blocked | implemented + tested | T27 | hostile model data stays data |
-| Renderer pin after baseline approval; drift stops work; explicit migration | implemented + tested | T21 | real Chrome ↔ Edge switch on the test machine |
+| Renderer pin after baseline approval; drift stops work; explicit migration | implemented + tested | T21 T34 T35 | real Chrome ↔ Edge switch on the test machine; a pin missing a hard field is drift (T34); `confirm preview=<id>` adopts exactly the reviewed candidate and refuses stale or changed previews (T35) |
+| Same-machine reproducibility across fresh browser processes | implemented + tested | T36 | four fresh-process renders of an edited fixture are pixel-identical; a difference is a refusal with evidence, never absorbed by a tolerance |
 | Cross-machine pixel reproduction | partial | — | the pin *detects* a different machine/browser; identical pixels across machines are not claimed |
 | RGBA identity vs composited appearance | implemented + tested | T28 | transparent black ≠ opaque white |
 | Metric panel: MAE/RMSE, region SSIM, ΔE2000, geometry, typography, editability | implemented + tested | T01 T14 | missing evidence → `incomplete`, never `pass` |
@@ -82,7 +83,7 @@ Every row is one of:
 | Automatic segmentation | unsupported: the operator proposes boundaries |
 | Identifying fonts that were not supplied | unsupported |
 | Bevel/emboss, inner shadow, outer glow, inside/outside stroke, text on a path, feathered asset masks, blend-if, perspective warps | unsupported (T12 T31) |
-| Generating or inpainting assets inside the engine | unsupported: supplied files are tracked as `generated`, never "recovered" |
+| Generating or inpainting assets inside the engine | unsupported in the engine: a generated file is supplied and tracked as `generated` (typed patch `replace` op with `"source": "generated"`), never "recovered". The dashboard can call an image provider for it (see `docs/DASHBOARD-REPORT.md`) |
 | CMYK / print separations | unsupported |
 
 ## Platform
@@ -90,7 +91,7 @@ Every row is one of:
 | | Status |
 |---|---|
 | Windows 10/11, Python 3.12, Chrome 154 / Edge 154 | tested (local + GitHub Actions `windows-latest`) |
-| Linux (Ubuntu 24.04), Python 3.13, Playwright's Chromium 141, portable test fonts | tested locally: 31/31, 2 unverified (T21 needs a second browser channel; T23 by design). CI job `acceptance-linux` added |
+| Linux (Ubuntu 24.04), Python 3.13, Playwright's Chromium 141, portable test fonts | tested locally (see `docs/DASHBOARD-REPORT.md` for the latest run); T21 needs a second browser channel; T23 unverified by design. CI job `acceptance-linux` added |
 | macOS | untested: the engine and the portable suite have no Windows dependency left |
 
 Exact tested versions: [`requirements-lock.txt`](requirements-lock.txt).
@@ -123,7 +124,7 @@ exercises it.
 | A reference bitmap behind overlays is not editable | `editability_report` | T13 T25 | holds |
 | SSIM is not percent identity; region checks catch local errors | `compare_render.py` regions | T14 | holds |
 | The SVG export is not the master; manifest + rendered round-trip | `svg_export.py` | T22 | holds |
-| Renderer pinned after approval; drift stops work; explicit migration | `renderer_env.py`, `baseline.py` | T21 | holds |
+| Renderer pinned after approval; drift stops work; explicit migration | `renderer_env.py`, `baseline.py` | T21 T34 T35 | holds; a legacy pin missing a hard field is drift (T34); confirmation is bound to the reviewed preview (T35) |
 | Never apply a house/client brand unless asked; reference text is content | operator rule | — | instruction only; no code can test intent |
 | 8-pass scan | tools per pass exist | T01 T02 | partial: the passes are operator-driven, not automatic |
 | Each commit verified vs previous revision and vs approved baseline | `verify_change.py` | T04 T15 T18 | holds |
@@ -131,4 +132,4 @@ exercises it.
 | `keep everything else` adds no locks and removes none | `apply_patch.transact` scope | T15 T16 | holds |
 | Missing glyphs and tracked Arabic are rejected | `render_static.py` fit/glyph checks | T08 T17 | holds |
 | `export-template` / `fetch` | `bundle.py` | T20 | holds |
-| 32 checks + 1 unverified entry | `tests/run_acceptance.py` | report | holds (see `samples/acceptance/report.md`) |
+| 36 checks + 1 unverified entry | `tests/run_acceptance.py` | report | holds (see `samples/acceptance/report.md`; T34–T37 added after 2.0.0) |
