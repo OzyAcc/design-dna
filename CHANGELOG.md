@@ -9,6 +9,10 @@ Design DNA installs in every AI tool that can load it, starting with ChatGPT, fr
 the acceptance suite runs off Windows (the first open item of the audit response).
 
 ### Added
+- Pixel differences are located, not just counted: a refused edit's `visual_changes.outside_where`, the SVG
+  round-trip, the approved-baseline re-run check and `compare_render`'s exact-pixel check now list the first
+  differing pixels with their before/after values (and, for edits, the element under each).
+- T10 renders the model 8 times in fresh browser launches instead of twice, and names any differing pixel.
 - **Choose your AI tool**: ChatGPT (Skills upload for Business, Enterprise, Healthcare and Edu; Codex for every
   plan; a labelled instruction kit for Free, Plus and Pro), Codex, Claude Code, the Claude apps, Cursor, GitHub
   Copilot, Gemini CLI, Windsurf, Cline, Roo Code, OpenCode, Kiro, Junie, Goose, any host reading `.agents/skills`,
@@ -55,6 +59,13 @@ the acceptance suite runs off Windows (the first open item of the audit response
   not only Edge; with none it stays unverified.
 - `annotate_scan.py` no longer crashes on text nodes whose baseline is not measured yet (found by the Claude Code
   end-to-end run).
+- Renderer: the same model now rasterises to the same pixels in every browser launch. With Chrome's partial raster,
+  a region painted again after an earlier frame was re-rasterised under a smaller clip, and anti-aliased edges inside
+  it could land a few levels differently: 2-5 pixels on the CTA pill's edge differed between launches on GitHub's
+  Linux and Windows runners, so an approved baseline sometimes failed to reproduce and legitimate edits were refused
+  (T10, T16, T20, T22, T26, T27, T32 at different times). The browser now runs with `--disable-partial-raster`, so
+  every re-raster covers whole tiles; it is recorded as `render_profile.determinism_args` (a hard drift field once a
+  pin records it; pins made before 2.1.0 are not declared drifted by it).
 - Renderer on Linux: text is now rasterised the same way everywhere. Chrome on Linux takes per-font hinting and
   subpixel settings from fontconfig, and stock distributions (Ubuntu, GitHub's runners) turn on slight hinting that
   `--font-render-hinting=none` does not override on every text path, so text in a full render and in a fitting page

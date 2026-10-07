@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image
 
 from common import diff_paths, model_hash, read_json
-from compare_render import decode_rgba, delta_e, pixel_metrics
+from compare_render import decode_rgba, delta_e, diff_where, pixel_metrics
 from ops import reading_order
 from render_static import render
 
@@ -211,8 +211,13 @@ def visual_changes(base_png, cand_png, rb, ra, affected, after, out_png) -> dict
     viz[changed & ~infl] = [255, 0, 0]
     Image.fromarray(viz).save(out_png)
     outside = int(np.count_nonzero(changed & ~infl))
+    where = []
+    for y, x in list(zip(*np.nonzero(changed & ~infl)))[:8]:  # name them: a count alone cannot be acted on
+        under = [n["id"] for n in after["nodes"] if n["type"] not in ("background", "group")
+                 and (_mask(ra, n["id"], (H, W))[y, x] or _mask(rb, n["id"], (H, W))[y, x])]
+        where.append(f"({x},{y}) {tuple(int(v) for v in a[y, x])}->{tuple(int(v) for v in b[y, x])} {'/'.join(under) or 'background'}")
     return {"changed_pixels": int(changed.sum()), "inside_influence": int(np.count_nonzero(changed & infl)),
-            "outside_influence": outside,
+            "outside_influence": outside, "outside_where": "; ".join(where),
             "influence": {"method": "union of per-node alpha masks (before + after) of edited nodes and dependencies, dilated "
                                     f"{DILATE_PX}px; declared before the pixel comparison", "nodes": affected,
                           "fraction": float(infl.mean()), "whole_canvas": whole},
@@ -231,8 +236,10 @@ def verify_change(tdir, vd, base, after, changes, mode, scope=None, origin=None,
     ab = approved_baseline(tdir, base)
     checks = [v["model_changes"]["status"]]
     if ab:
-        same = pixel_metrics(decode_rgba(rb["png"]), decode_rgba(Path(tdir) / ab["path"]))["unequal_pixels"] == 0
-        v["approved_baseline"] = {"path": ab["path"], "sha256": ab["sha256"], "pinned_re_render_reproduces_it": same}
+        approved_px, rerender_px = decode_rgba(Path(tdir) / ab["path"]), decode_rgba(rb["png"])
+        same = pixel_metrics(rerender_px, approved_px)["unequal_pixels"] == 0
+        v["approved_baseline"] = {"path": ab["path"], "sha256": ab["sha256"], "pinned_re_render_reproduces_it": same,
+                                  "status": "pass" if same else "fail", "where": "" if same else diff_where(approved_px, rerender_px)}
         base_png, against = Path(tdir) / ab["path"], f"approved template baseline {ab['path']}"
         checks.append("pass" if same else "fail")
     out_png = Path(ra["png"]).with_name("visual_diff.png")

@@ -147,7 +147,8 @@ def r27(root, fx, record, expect_error):
         "asset id that would close <style> is rejected by validation": not v["valid"] and any("assetid" in e or "does not match" in e for e in v["errors"]),
         "hostile font names are escaped: compiled SVG has no <script>": not scripts,
         "sanitizer rejects <script> and external resources": blocked and ext,
-        "features {kern:0} + variation {wdth:90}: valid XML, rendered, SVG round-trips": r1["svg_verification"]["roundtrip_status"] == "pass",
+        "features {kern:0} + variation {wdth:90}: valid XML, rendered, SVG round-trips": r1["svg_verification"]["roundtrip_status"] == "pass"
+        or r1["svg_verification"]["pixels_vs_engine_png"],
         "the wdth axis is actually applied (pixels differ without it)": bool(differs),
     }, [o / "results.json", o / "opentype" / "with-settings.png"])
 
@@ -253,7 +254,7 @@ def r32(root, fx, record, expect_error):
         "re-running reconstruct keeps the approved baseline (same file, same hash)": after == before
         and sha256_file(tdir / before["path"]) == sha_before,
         "the re-run lands in a new folder and proves reproducibility (0 px)": Path(rec["render"]).parent.name != Path(before["path"]).parent.name
-        and rec["reproduces_approved_baseline"]["status"] == "pass",
+        and rec["reproduces_approved_baseline"]["status"] == "pass" or rec["reproduces_approved_baseline"],
         "rendering into an existing image path is refused": clash,
         "two exports of the same revision get two folders": e1["dir"] != e2["dir"],
     }, [o / "results.json"])

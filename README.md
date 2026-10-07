@@ -221,7 +221,7 @@ it supports.
 | 7 | Impossible fit under fixed constraints: conflict + options, nothing shrunk or clipped | expected rejection | ✅ |
 | 8 | Mixed Arabic/English headline: glyph coverage, shaping, bidi, punctuation | adaptation | ✅ |
 | 9 | Reflow 4:5 → 9:16: reading order, margins, fit | reflow | ✅ |
-| 10 · 11 | Same model rendered twice is pixel-identical · undo + fresh-process reload | determinism · persistence | ✅ |
+| 10 · 11 | Same model rendered 8 times in fresh browser launches is pixel-identical · undo + fresh-process reload | determinism · persistence | ✅ |
 | 12 · 13 · 14 | Unsupported features return explicit statuses · reference-bitmap shortcut rejected · a wrong word or 3 px shift fails despite SSIM ≥ 0.998 | expected rejection | ✅ |
 | 15 | "Move the headline up 3 px and keep everything else" | preservation | ✅ |
 | 16 | An explicit lock conflicts with a keep-everything-else edit; pixel locks | expected rejection | ✅ |

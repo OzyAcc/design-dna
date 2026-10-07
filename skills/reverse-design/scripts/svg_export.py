@@ -73,7 +73,7 @@ def export_svg(scene, tdir, out_dir, name, fit_sizes, fonts="embed") -> dict:
 
 def verify_svg(svg_path, png_path, scene, channel=None) -> dict:
     """Render the exported SVG file itself, compare with the PNG render, and check live text + rasters structurally."""
-    from compare_render import decode, pixel_metrics
+    from compare_render import decode, diff_where, pixel_metrics
     from renderer_env import browser, capture
 
     W, H = int(scene["canvas"]["width"]), int(scene["canvas"]["height"])
@@ -88,6 +88,8 @@ def verify_svg(svg_path, png_path, scene, channel=None) -> dict:
     a, _ = decode(png_path)
     bimg, _ = decode(tmp)
     pm = pixel_metrics(a, bimg) if a.shape == bimg.shape else {"unequal_pixels": None, "note": "dimension mismatch"}
+    if pm.get("unequal_pixels"):
+        pm["where"] = diff_where(a, bimg)
     root = ET.parse(svg_path).getroot()
     texts = {}
     for g in root.iter(f"{SVGNS}g"):

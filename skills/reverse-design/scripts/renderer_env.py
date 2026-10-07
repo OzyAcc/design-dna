@@ -24,6 +24,13 @@ from common import DnaError, now
 CHANNELS = ("chrome", "msedge", "chromium")  # chromium = Playwright's bundled build (`playwright install chromium`)
 BROWSER_ARGS = ["--force-color-profile=srgb", "--disable-lcd-text", "--disable-gpu", "--font-render-hinting=none"]
 COLOR_POLICY = "sRGB forced; image assets untagged -> treated as sRGB"
+# Raster scheduling. With partial raster, a region painted again after an earlier frame (fonts arriving, the fit
+# measurement touching text) is re-rasterised under a smaller clip, and anti-aliased edges inside it can land a few
+# levels differently: seen on CI runners as 2-5 pixels of a rounded rectangle's edge differing between launches of the
+# same model. Every re-raster now covers whole tiles. (--run-all-compositor-stages-before-draw was tried too and is
+# left out: it made a headless screenshot wait past its timeout.) Recorded apart from browser_args so that pins made
+# before 2.1.0 are not declared drifted by it.
+DETERMINISM_ARGS = ["--disable-partial-raster"]
 # Chrome on Linux takes per-font hinting and subpixel settings from fontconfig, and stock distributions turn on slight
 # hinting: --font-render-hinting=none does not reach every text path, so the same text rasterised differently in a
 # full scene and in a fitting page. On Linux the browser gets a fontconfig file that includes the system configuration
@@ -32,8 +39,9 @@ TEXT_RENDERING = ("fontconfig enforced: antialias, no hinting, no subpixel order
                   else "platform default (no fontconfig)")
 # Environment fields. Viewport, alpha and the font list are recorded too, but they follow the scene (a reflow changes
 # the viewport, an adaptation may add a font asset), so they are not drift; a pinned font still in use must keep its hash.
-HARD = ("channel", "browser_version", "device_scale_factor", "browser_args", "color_policy", "font_synthesis", "text_rendering")
-SINCE_2_1 = ("text_rendering",)  # pins made before 2.1.0 do not record it: compared once a pin does
+HARD = ("channel", "browser_version", "device_scale_factor", "browser_args", "color_policy", "font_synthesis", "text_rendering",
+        "determinism_args")
+SINCE_2_1 = ("text_rendering", "determinism_args")  # pins made before 2.1.0 do not record them: compared once a pin does
 SOFT = ("playwright", "python", "os", "packages")
 RECORDED = ("viewport", "alpha", "fonts", "animations", "randomness", "renderer")
 PACKAGES = ("pillow", "numpy", "scikit-image", "scipy", "fonttools", "jsonschema", "playwright")
@@ -78,7 +86,7 @@ def launch(p, channel=None):
     tried = []
     for ch in ([channel] if channel else CHANNELS):
         try:
-            return p.chromium.launch(channel=None if ch == "chromium" else ch, args=BROWSER_ARGS, env=env), ch
+            return p.chromium.launch(channel=None if ch == "chromium" else ch, args=BROWSER_ARGS + DETERMINISM_ARGS, env=env), ch
         except Error as e:
             tried.append(f"{ch}: {str(e).strip().splitlines()[0][:160]}")
     raise DnaError("no Chromium-based browser could be launched" + (f" (requested {channel})" if channel else ""),
@@ -122,7 +130,8 @@ def environment(channel, browser_version, W, H, alpha, fonts) -> dict:
     """Snapshot of everything that can change rasterisation, plus the software around it."""
     return {"renderer": "playwright-chromium", "channel": channel, "browser_version": browser_version,
             "viewport": [W, H], "device_scale_factor": 1, "browser_args": list(BROWSER_ARGS), "color_policy": COLOR_POLICY,
-            "text_rendering": TEXT_RENDERING, "alpha": alpha, "font_synthesis": "none unless declared", "animations": "disabled",
+            "text_rendering": TEXT_RENDERING,
+            "determinism_args": list(DETERMINISM_ARGS), "alpha": alpha, "font_synthesis": "none unless declared", "animations": "disabled",
             "randomness": "feTurbulence seeds fixed in scene", "fonts": sorted(fonts, key=lambda f: f["sha256"]),
             "playwright": _pkg("playwright"), "python": platform.python_version(), "os": platform.platform(),
             "packages": {k: _pkg(k) for k in PACKAGES}}
