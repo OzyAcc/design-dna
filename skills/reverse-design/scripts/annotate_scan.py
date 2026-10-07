@@ -44,7 +44,7 @@ def main() -> int:
         g = n["geometry"]
         c = COLORS.get(n["type"], "#000000")
         d.rectangle([g["x"], g["y"], g["x"] + g["w"], g["y"] + g["h"]], outline=c, width=2)
-        if n["type"] == "text":
+        if n["type"] == "text" and n.get("first_baseline") is not None:  # mid-scan text may not be measured yet
             d.line([g["x"], n["first_baseline"], g["x"] + g["w"], n["first_baseline"]], fill=c, width=1)
         tag = n.get("alias") or n["id"]
         if uncertain(n):

@@ -268,7 +268,8 @@ class Library:
             with zipfile.ZipFile(io.BytesIO(self.backend.get(name))) as z:
                 m = json.loads(z.read("manifest.json"))
             out.append({"bundle": name, "template_id": m["template_id"], "name": m["name"], "aliases": m.get("aliases", []),
-                        "readiness": m.get("readiness"), "exported_at": m["exported_at"], "variants": list(m.get("variants", {}))})
+                        "readiness": m.get("readiness"), "exported_at": m["exported_at"], "variants": list(m.get("variants", {})),
+                        "self_contained": all(f.get("embedded") for f in m.get("fonts", []))})
         return out
 
     def find(self, ref: str) -> dict:
@@ -278,7 +279,8 @@ class Library:
             raise DnaError(f"{ref!r} matches several templates", "ambiguous_target", {"candidates": hits})
         if not hits:
             raise DnaError(f"no bundle for {ref!r}", "unknown_template")
-        return max(hits, key=lambda e: e["exported_at"])
+        # newest export wins; two exports in the same second prefer the self-contained one (fonts embedded), then the name
+        return max(hits, key=lambda e: (e["exported_at"], e["self_contained"], e["bundle"]))
 
 
 def main() -> int:
