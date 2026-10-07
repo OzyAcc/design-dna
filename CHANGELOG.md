@@ -55,6 +55,12 @@ the acceptance suite runs off Windows (the first open item of the audit response
   not only Edge; with none it stays unverified.
 - `annotate_scan.py` no longer crashes on text nodes whose baseline is not measured yet (found by the Claude Code
   end-to-end run).
+- Renderer on Linux: text is now rasterised the same way everywhere. Chrome on Linux takes per-font hinting and
+  subpixel settings from fontconfig, and stock distributions (Ubuntu, GitHub's runners) turn on slight hinting that
+  `--font-render-hinting=none` does not override on every text path, so text in a full render and in a fitting page
+  differed: T01's CTA fit ended 1 px off and its region failed on `ubuntu-latest` only. The browser now gets a
+  fontconfig file that includes the system configuration and assigns antialiasing, no hinting and no subpixel order.
+  The policy is recorded in the render profile as `text_rendering` (a hard drift field for pins that record it).
 - T20 exports its font-referenced bundle to a folder of its own. With both bundles in one library, a lookup by
   name returns the newest export, so whenever the second export landed in a later second T20 imported the
   font-referenced bundle, which cannot import where its fonts are not installed (seen as a T20 crash cascading into

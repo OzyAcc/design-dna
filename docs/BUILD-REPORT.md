@@ -144,6 +144,15 @@ whenever its export landed in a later second than the self-contained one, which 
 cover. T20 now keeps the two bundles in separate folders. T01 alone also passes with the CI job's exact Python
 (3.12) and `requirements-lock.txt` packages.
 
+**T01 on GitHub's runners, and the renderer fix: `20261007-015350`, 32/32 passed, 1 unverified (T23).** T01 still
+failed on `ubuntu-latest` (CTA regions below SSIM 0.99, CTA fit MAE 6.39 instead of 0.07). Crops printed by the CI job
+showed the cause: the runner's text was vertically hinted. This build container carries a fontconfig override that
+disables hinting; stock Ubuntu enables slight hinting, and Chrome on Linux applies it per font on some text paths
+despite `--font-render-hinting=none`, so a full render and a fitting page rasterised the same text differently. With
+the container's override removed (stock Ubuntu fontconfig, as on the runners) T01 failed with the runner's exact
+numbers. The renderer now hands the browser its own fontconfig file (the system configuration plus antialiasing, no
+hinting, no subpixel order); with it the full suite passes under the stock configuration, Chrome 154.0.8037.97.
+
 The CI workflow gains an `acceptance-linux` job (ubuntu-latest, portable fonts, `requirements-lock.txt`). It runs
 on the next push to `main` or pull request; its results are not part of this report yet. macOS is untested.
 
