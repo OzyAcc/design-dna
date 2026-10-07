@@ -135,6 +135,25 @@ def op_render_scene(r):
     return {"png": res["png"], "png_sha256": res["png_sha256"], "fit": res["fit"], "pin_check": res["pin_check"]}
 
 
+def op_pin_check(r):
+    """The renderer pin check a render of the variant head would run, without rendering: the browser is launched only
+    to read its version. Hard differences raise renderer_drift, exactly as that render would."""
+    from apply_patch import load_variant
+    from common import template_dir
+    from render_static import current_environment
+    from renderer_env import compare_pin, drift_error, pin_of, requested_channel
+
+    tdir = template_dir(r["engine_id"])
+    scene = load_variant(r["engine_id"], r["variant"])[2]
+    pin = pin_of(scene, tdir)
+    if not pin:
+        return {"pinned": False, "hard": [], "soft": [], "status": "unpinned"}
+    diff = compare_pin(pin, current_environment(scene, tdir, requested_channel(pin)))
+    if diff["hard"]:
+        raise drift_error(pin, diff, "pin check, nothing rendered")
+    return {"pinned": True, "pinned_at": pin.get("pinned_at"), **diff, "status": "match"}
+
+
 def op_annotate(r):
     import subprocess
 

@@ -1,6 +1,6 @@
-"""T15 concurrent jobs · T16 frozen template version · T17 deterministic adaptation checks · T18 creative generation
-· T19 missing keys and provider failures · T23 partial failure, scoped retry, cancel · T24 worker crash and restart
-· T26 output and ZIP export."""
+"""T15 concurrent jobs · T16 frozen template version · T17 deterministic adaptation checks · T18 creative generation (and
+the pin check before a paid slot image) · T19 missing keys and provider failures · T23 partial failure, scoped retry,
+cancel · T24 worker crash and restart · T26 output and ZIP export."""
 from __future__ import annotations
 
 import hashlib
@@ -219,6 +219,35 @@ class T18Creative(unittest.TestCase):
         self.assertTrue(recorded, "the engine store records the slot image as generated, not supplied")
         S.record("T18", {"creative": {"status": cr["status"], "preservation": cr["checks"]["preservation"], "mock": True},
                          "creative_slot": {"status": sl["status"], "engine_records_generated": [str(p.relative_to(home)) for p in recorded][:3]}})
+
+    def test_creative_slot_on_a_drifted_pin_is_refused_before_the_paid_request(self):
+        from dna_dashboard import enginelib as el
+        from dna_dashboard import templates_svc as ts
+
+        v, ps = setup_shared()
+        c = S.copy_of(S.base_template()["id"], "Legacy pin slot probe")
+        conn = S.db.connect()
+        pp_path = ts.work_tdir(ts.get(conn, c["id"])) / "passport.json"
+        pp = el.read_json(pp_path)
+        pp["render_pin"].pop("text_rendering")  # what a pin written before 2.1.0 looks like: drift until a migration
+        el.write_json(pp_path, pp)
+        ok(client.post(f"/api/templates/{c['id']}/save-version", json={"note": "legacy pin"}))
+        S.drain()
+        legacy = ok(client.get(f"/api/templates/{c['id']}"))["current_version"]
+        self.assertIsNone(legacy["baseline"]["pin"]["text_rendering"])
+        r = submit(batch(legacy, ps[:1], mode="creative_slot", name="slot on a legacy pin"), "t18-slot-legacy-pin")
+        S.drain()
+        o = run(r["run_id"])["outputs"][0]
+        self.assertEqual(o["mode"], "creative_slot")
+        self.assertEqual((o["status"], o["error"]["kind"]), ("needs_review", "renderer_drift"), o.get("error"))
+        self.assertIn("confirm a renderer migration on the template page", o["error"]["message"])
+        hard = [h for x in o["error"]["conflicts"] for h in x["detail"]["hard"]]
+        self.assertTrue(any(h["field"] == "text_rendering" and h.get("legacy_pin") for h in hard), hard)
+        self.assertFalse(o["files"])
+        self.assertIsNone(o["provenance"]["generated"])
+        n = S.db.one(conn, "SELECT COUNT(*) AS n FROM provider_requests WHERE job_id = ?", (o["job_id"],))["n"]
+        self.assertEqual(n, 0, "the pin is checked before the image request, so a refused output costs nothing")
+        S.record("T18.slot_pin_check", {"status": o["status"], "kind": o["error"]["kind"], "provider_requests": n})
 
 
 class T19ProvidersMissingOrFailing(unittest.TestCase):

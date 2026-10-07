@@ -6,7 +6,8 @@ previous revision and the approved baseline -> PNG + SVG export with manifest an
 passed are reported as passed; a refused transaction stays a review artifact.
 Creative generation: a configured image provider makes a new image from the reference and the product photos. Its
 provenance is recorded; no preservation or editability claim is made. creative_slot places a generated product scene
-into the template's image slot and then runs the same engine adaptation and checks.
+into the template's image slot and then runs the same engine adaptation and checks; the template's renderer pin is
+checked first, so a pin the transaction would refuse costs no paid request.
 """
 from __future__ import annotations
 
@@ -140,6 +141,12 @@ def generate(ctx):
     image_file, source, prov_meta = None, "supplied", None
     if inputs.get("image") and inputs["image"].get("asset_id"):
         if o["mode"] == "creative_slot":
+            # the transaction would refuse a drifted pin anyway: find that out before paying for an image
+            ctx.stage("pin", "checking the template's pinned renderer before the paid image request")
+            try:
+                engine.call("pin_check", {"engine_id": v["engine_id"], "variant": variant}, ctx.home, cancel=ctx.cancelled)
+            except EngineError as e:
+                return _refused(ctx, o, odir, e, None)
             image_file, prov_meta = _generated_slot_image(ctx, o, v)
             source = "generated"
         else:
@@ -200,7 +207,8 @@ def generate(ctx):
 
 
 def _refused(ctx, o, odir, e: EngineError, prov_meta):
-    """A refused transaction is a review artifact with the engine's conflicts and options, never a final output."""
+    """A refused transaction (or pin check, before any paid request) is a review artifact with the engine's conflicts
+    and options, never a final output."""
     txn = e.detail or {}
     conflicts = txn.get("conflicts") or [e.engine]
     files = []
