@@ -96,3 +96,29 @@ jobs:
           name: acceptance-evidence-linux
           path: acceptance-out/
           retention-days: 14
+
+  render-determinism:
+    # Manual runs only: repeated renders of one template in fresh browser launches, under several Chromium flag
+    # sets, to find a configuration whose rasterisation does not vary between launches on the hosted runners.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DESIGN_DNA_ACCEPTANCE_DIR: ${{ github.workspace }}/acceptance-out
+      DESIGN_DNA_FONTSET: portable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-lock.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: build the test template (setup + T10)
+        run: python skills/reverse-design/tests/run_acceptance.py --only 10 || true
+      - name: repeated renders per flag set
+        run: |
+          python skills/reverse-design/tests/render_determinism.py acceptance-out/*/store/templates/editorial-product-spotlight --runs 30 \
+            --config one-raster-thread=--num-raster-threads=1 \
+            --config no-partial-raster=--disable-partial-raster \
+            --config all-stages-before-draw=--run-all-compositor-stages-before-draw \
+            --config combined=--num-raster-threads=1,--disable-partial-raster,--run-all-compositor-stages-before-draw,--disable-checker-imaging

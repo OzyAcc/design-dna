@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image
 
 from common import diff_paths, model_hash, read_json
-from compare_render import decode_rgba, delta_e, pixel_metrics
+from compare_render import decode_rgba, delta_e, diff_where, pixel_metrics
 from ops import reading_order
 from render_static import render
 
@@ -236,8 +236,10 @@ def verify_change(tdir, vd, base, after, changes, mode, scope=None, origin=None,
     ab = approved_baseline(tdir, base)
     checks = [v["model_changes"]["status"]]
     if ab:
-        same = pixel_metrics(decode_rgba(rb["png"]), decode_rgba(Path(tdir) / ab["path"]))["unequal_pixels"] == 0
-        v["approved_baseline"] = {"path": ab["path"], "sha256": ab["sha256"], "pinned_re_render_reproduces_it": same}
+        approved_px, rerender_px = decode_rgba(Path(tdir) / ab["path"]), decode_rgba(rb["png"])
+        same = pixel_metrics(rerender_px, approved_px)["unequal_pixels"] == 0
+        v["approved_baseline"] = {"path": ab["path"], "sha256": ab["sha256"], "pinned_re_render_reproduces_it": same,
+                                  "status": "pass" if same else "fail", "where": "" if same else diff_where(approved_px, rerender_px)}
         base_png, against = Path(tdir) / ab["path"], f"approved template baseline {ab['path']}"
         checks.append("pass" if same else "fail")
     out_png = Path(ra["png"]).with_name("visual_diff.png")
