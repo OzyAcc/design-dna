@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type Batch, type Matrix, type Template } from "../api";
 import { errText, useLocal, useToast } from "../lib";
 import { ProductTray, useProducts } from "./Products";
+import { Icon } from "./ui";
 
 export type Picked = { template_id: string; version_id: string; name: string; number: number; thumb_url: string };
 
@@ -60,8 +61,8 @@ export default function Composer({ c, templates, open, onOpen, title = "Create a
   return (
     <details className="panel composer" open={open} onToggle={(e) => onOpen((e.target as HTMLDetailsElement).open)}>
       <summary>
-        <span><span className="label">Generate</span><br /><strong style={{ fontFamily: "var(--serif)", fontSize: 18 }}>{title}</strong></span>
-        <span className="muted small">{c.picked.length} template{c.picked.length === 1 ? "" : "s"} × {c.products.length} product{c.products.length === 1 ? "" : "s"} = {count} output{count === 1 ? "" : "s"}</span>
+        <span className="composer-summary"><span className="composer-symbol"><Icon name="sparkles" size={20} /></span><span><span className="label">Templates → products → content</span><br /><strong style={{ fontFamily: "var(--serif)", fontSize: 19 }}>{title}</strong></span></span>
+        <span className="composer-math"><span className="math-count">{c.picked.length} template{c.picked.length === 1 ? "" : "s"}</span><span>×</span><span className="math-count">{c.products.filter(id => prods.items.some(p => p.id === id)).length} products</span><Icon name="arrow" size={14} /><strong>{count} outputs</strong></span>
       </summary>
       <div className="panel-body stack">
         <div className="stack">
@@ -87,9 +88,9 @@ export default function Composer({ c, templates, open, onOpen, title = "Create a
           )}
         </div>
         <ProductTray items={prods.items} selected={c.products} onToggle={c.toggleProduct} onChanged={prods.reload} compact />
-        <div className="row between">
+        <div className="row between composer-footer">
           <span className="muted small">Next: review the text and instructions for every output before anything is generated.</span>
-          <button className="btn accent" disabled={!c.picked.length || !count || busy} onClick={go}>Continue to content review →</button>
+          <button className="btn accent" disabled={!c.picked.length || !count || busy} onClick={go}>{busy ? "Preparing batch…" : "Review output content"}<Icon name="arrow" size={16} /></button>
         </div>
       </div>
     </details>

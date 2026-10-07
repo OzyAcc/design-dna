@@ -6,6 +6,7 @@ import CompareViewer from "../components/CompareViewer";
 import Composer, { useComposer } from "../components/Composer";
 import Inspector, { type ModelView } from "../components/Inspector";
 import { Dev, errText, Events, JobLine, useJob, useToast } from "../lib";
+import { Icon } from "../components/ui";
 
 export default function TemplateDetail() {
   const { id } = useParams();
@@ -53,7 +54,7 @@ export default function TemplateDetail() {
           </div>
         </div>
         <div className="row">
-          <button className="btn accent" disabled={!v} onClick={() => { c.ensureTemplate(t); setUseOpen(true); }}>Use template</button>
+          <button className="btn accent" disabled={!v} onClick={() => { c.ensureTemplate(t); setUseOpen(true); }}><Icon name="sparkles" size={16} />Use template</button>
           {t.role === "copy" ? <Link className="btn" to={`/templates/${t.id}/edit`}>Edit copy</Link> : <button className="btn secondary" disabled={!v} onClick={() => copy()}>Copy and edit</button>}
           {!v && t.role === "original" && <Link className="btn secondary" to={`/templates/new?id=${t.id}`}>Continue scan</Link>}
           {v && <a className="btn secondary" href={v.download_url}>Export bundle</a>}
@@ -61,6 +62,7 @@ export default function TemplateDetail() {
             : <button className="btn ghost" onClick={() => act("archive", {}, "Archived — versions and assets used by outputs are kept")}>Archive</button>}
         </div>
       </div>
+      <div className="detail-guide"><Icon name={t.role === "copy" ? "copy" : "shield"} size={20} /><div><strong>{t.role === "copy" ? "Your editable copy" : "Original reference, protected"}</strong><p>{t.role === "copy" ? "Explore the design’s parts below. Edit this copy to change its rules, then use it with your products." : "Inspect the layout, colours, type and rules below. Create a copy to edit, or use this version with your products."}</p></div></div>
       {(t.busy || busyJob) && <div className="card flat" style={{ marginBottom: 16 }}><JobLine job={busyJob} label={t.busy?.kind || busyJob?.kind} /><Events job={busyJob} /></div>}
       {t.draft?.copy_check?.reproduces_approved_baseline && (
         <div className={`notice ${t.draft.copy_check.reproduces_approved_baseline.status === "pass" ? "ok" : "bad"}`} style={{ marginBottom: 16 }}>

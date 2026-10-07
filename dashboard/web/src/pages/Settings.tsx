@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import { api } from "../api";
 import { Dev, errText, useAsync, useToast } from "../lib";
+import { Icon, PageHeader } from "../components/ui";
 
 const HEALTH: Record<string, [string, string]> = {
   configured: ["ok", "Configured and reachable"], unconfigured: ["", "Not configured"], unauthorized: ["bad", "Key rejected"],
@@ -21,9 +22,7 @@ export default function Settings() {
   const caps = rt.data?.engine?.capabilities || {};
   return (
     <>
-      <div className="page-head"><div><span className="label">Settings</span><h1>Providers and runtime</h1>
-        <p className="lede">What this installation can actually do right now. Missing keys only disable the actions that need them: intake, drafts, manual scanning, editing and deterministic rendering keep working.</p></div>
-        <button className="btn secondary" onClick={check} disabled={checking}>{checking ? "Checking…" : "Check providers now"}</button></div>
+      <PageHeader eyebrow="Workspace settings" title={<>Make the studio yours<span className="title-dot">.</span></>} description="Connect AI providers, manage fonts and check what your workspace can do." actions={<button className="btn secondary" onClick={check} disabled={checking}><Icon name="settings" size={16} />{checking ? "Checking…" : "Check providers now"}</button>} />
       <div className="grid2">
         <section className="stack">
           <h2>AI providers</h2>

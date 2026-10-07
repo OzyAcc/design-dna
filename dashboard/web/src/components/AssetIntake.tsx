@@ -1,8 +1,9 @@
 // Upload, paste and link intake for both roles. Pasting into a text field still pastes text: clipboard images are only
 // taken when the paste is not aimed at a text field. Links are fetched by the server (not by the browser).
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api, type Asset } from "../api";
 import { errText, fmtBytes } from "../lib";
+import { Icon } from "./ui";
 
 type Candidate = { url: string; declared_by: string; alt: string; ok: boolean | null; reason?: string; thumb?: string; width?: number; height?: number; bytes?: number };
 type PageResult = { kind: "page"; page_url: string; title: string; site_name: string; candidates: Candidate[]; error?: string };
@@ -17,6 +18,7 @@ export default function AssetIntake({ role, multiple = false, onAdded, listenPas
   const [page, setPage] = useState<PageResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const zoneRef = useRef<HTMLDivElement>(null);
+  const linkId = useId();
 
   const upload = async (files: File[], kind: "upload" | "paste") => {
     const list = multiple ? files : files.slice(0, 1);
@@ -67,23 +69,26 @@ export default function AssetIntake({ role, multiple = false, onAdded, listenPas
   }, [listenPaste, role, multiple]);
 
   return (
-    <div className="stack" ref={zoneRef}>
-      <div className={`dropzone ${over ? "over" : ""}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
+    <div className="stack" ref={zoneRef} aria-busy={!!busy}>
+      <div className={`dropzone ${over ? "over" : ""} ${compact ? "compact" : ""}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
            onDrop={(e) => { e.preventDefault(); setOver(false); upload(Array.from(e.dataTransfer.files), "upload"); }}>
+        {!compact && <div className="intake-icon"><Icon name={role === "inspiration" ? "image" : "upload"} size={25} /></div>}
         <p style={{ margin: compact ? 0 : undefined }}>
           <strong>{label || (role === "inspiration" ? "Drop a finished design here" : "Drop product photos here")}</strong>
-          {!compact && <><br /><span className="muted small">PNG, JPEG, WebP, TIFF, BMP or GIF (first frame). Or paste an image (⌘/Ctrl+V) anywhere on this page.</span></>}
+          {!compact && <><br /><span className="muted small">Upload a file or paste an image with ⌘ / Ctrl V.</span></>}
         </p>
         <div className="row" style={{ justifyContent: "center", marginTop: 10 }}>
-          <button className="btn secondary small" type="button" onClick={() => fileRef.current?.click()}>Choose file{multiple ? "s" : ""}</button>
+          <button className="btn secondary small" type="button" disabled={!!busy} onClick={() => fileRef.current?.click()}><Icon name="upload" size={15} />Choose file{multiple ? "s" : ""}</button>
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/tiff,image/bmp,image/gif" multiple={multiple} hidden
                  onChange={(e) => { upload(Array.from(e.target.files || []), "upload"); e.target.value = ""; }} />
         </div>
+        {!compact && <div className="intake-methods"><span>PNG / JPG / WebP / TIFF / BMP / GIF</span><span>GIF: first frame</span></div>}
       </div>
-      <form className="row" onSubmit={(e) => { e.preventDefault(); resolveLink(url); }}>
-        <label className="sr-only" htmlFor={`link-${role}`}>Image or page link</label>
-        <input id={`link-${role}`} type="url" placeholder="…or paste a link to an image or a public web page" value={url} onChange={(e) => setUrl(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
-        <button className="btn secondary small" type="submit" disabled={!url.trim() || !!busy}>Add link</button>
+      {!compact && <div className="intake-divider">or add a link</div>}
+      <form className="intake-link" onSubmit={(e) => { e.preventDefault(); resolveLink(url); }}>
+        <label className="sr-only" htmlFor={linkId}>Image or page link</label>
+        <div className="search-field"><Icon name="link" size={16} /><input id={linkId} type="url" placeholder="Image URL or public page link" value={url} onChange={(e) => setUrl(e.target.value)} /></div>
+        <button className="btn secondary small" type="submit" disabled={!url.trim() || !!busy}>Add link<Icon name="arrow" size={14} /></button>
       </form>
       {busy && <div className="row muted small"><span className="spinner" /> {busy}</div>}
       {err && <div className="notice bad" role="alert">{err}</div>}

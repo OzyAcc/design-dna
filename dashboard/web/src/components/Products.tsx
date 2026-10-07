@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api, type Asset, type Product } from "../api";
 import { errText, useToast } from "../lib";
 import AssetIntake from "./AssetIntake";
+import { Dialog, Icon } from "./ui";
 
 export function useProducts() {
   const [items, setItems] = useState<Product[]>([]);
@@ -20,23 +21,22 @@ export function ProductEditor({ product, onClose, onSaved }: { product: Product 
   const [facts, setFacts] = useState((product?.facts || []).join("\n"));
   const [instructions, setInstructions] = useState(product?.instructions || "");
   const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
   const toast = useToast();
   const move = (i: number, d: number) => setImages((im) => { const n = [...im]; const j = i + d; if (j < 0 || j >= n.length) return n; [n[i], n[j]] = [n[j], n[i]]; return n; });
   const save = async () => {
-    setErr("");
+    if (saving) return;
+    setErr(""); setSaving(true);
     const body = { name: name.trim() || "Untitled product", primary_asset_id: images[0]?.id ?? null, detail_asset_ids: images.slice(1).map((a) => a.id),
                    description, facts: facts.split("\n").map((f) => f.trim()).filter(Boolean), instructions };
     try {
       const p = product ? await api.patch<Product>(`/api/products/${product.id}`, body) : await api.post<Product>("/api/products", body);
       toast(`Saved ${p.name}`); onSaved(p);
-    } catch (e) { setErr(errText(e)); }
+    } catch (e) { setErr(errText(e)); } finally { setSaving(false); }
   };
   return (
-    <>
-      <div className="drawer-back" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="pe-title">
-        <div className="row between"><h2 id="pe-title">{product ? "Edit product" : "Add a product"}</h2><button className="btn ghost small" onClick={onClose}>Close</button></div>
-        <p className="muted small">Products are inputs for generation, not an inventory. Nothing you type here is published.</p>
+      <Dialog open onClose={onClose} title={product ? "Edit product" : "Add a product"} className="product-dialog">
+        <p className="muted small">Supply photos, facts and instructions to use with your selected templates.</p>
         <label className="field"><span className="label">Name</span><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sage lounge chair" autoFocus /></label>
         <div className="field">
           <span className="label">Images <span className="muted">first = primary</span></span>
@@ -65,9 +65,8 @@ export function ProductEditor({ product, onClose, onSaved }: { product: Product 
         <label className="field"><span className="label">Extra instructions</span>
           <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={2} placeholder="Mood, message or setting you want (not facts)." /></label>
         {err && <div className="notice bad" role="alert">{err}</div>}
-        <div className="row"><button className="btn" onClick={save}>Save product</button><button className="btn ghost" onClick={onClose}>Cancel</button></div>
-      </aside>
-    </>
+        <div className="row"><button className="btn accent" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save product"}<Icon name="check" size={16} /></button><button className="btn ghost" onClick={onClose}>Cancel</button></div>
+      </Dialog>
   );
 }
 
@@ -79,7 +78,7 @@ export function ProductTray({ items, selected, onToggle, onChanged, compact = fa
     <div className="stack">
       <div className="row between">
         <span className="label">Products ({selected.length} selected)</span>
-        <button className="btn secondary small" onClick={() => setEditing("new")}>+ Add product</button>
+        <button className="btn secondary small" onClick={() => setEditing("new")}><Icon name="plus" size={14} />Add product</button>
       </div>
       {items.length === 0 ? (
         <p className="muted small">No products yet. Add one with a photo, a short description and any instructions.</p>

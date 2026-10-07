@@ -2,17 +2,18 @@
 import { Link } from "react-router-dom";
 import { api, type Run } from "../api";
 import { STATUS_LABEL, StatusDot, useAsync } from "../lib";
+import { EmptyState, Icon, PageHeader } from "../components/ui";
 
 export default function Runs() {
   const { data, error, loading } = useAsync(() => api.get<Run[]>("/api/runs"), []);
   return (
     <>
-      <div className="page-head"><div><span className="label">Results</span><h1>Runs</h1><p className="lede">Reopen any batch you generated. Outputs keep their frozen inputs, template version, files and checks.</p></div></div>
+      <PageHeader eyebrow="Your generated work" title={<>Results<span className="title-dot">.</span></>} description="Review each output, understand its checks and export the work you approve." actions={<Link className="btn secondary" to="/templates"><Icon name="layers" size={16} />Create a new batch</Link>} />
       {error && <div className="notice bad">{error}</div>}
       {loading && !data && <p className="muted">Loading…</p>}
-      {data && data.length === 0 && <div className="empty"><h2>No runs yet</h2><p className="muted">Select templates and products in the library, review the content, then generate.</p><div className="row"><Link className="btn" to="/templates">Open the library</Link></div></div>}
+      {data && data.length === 0 && <EmptyState icon="results" title="Your first batch is waiting." actions={<Link className="btn accent" to="/templates">Choose templates<Icon name="arrow" size={16} /></Link>}><p>Select templates from the library, add your products and review the content before you generate.</p></EmptyState>}
       {data && data.length > 0 && (
-        <table className="data">
+        <div className="table-wrap"><table className="data">
           <thead><tr><th>Run</th><th>Status</th><th>Outputs</th><th>Submitted</th></tr></thead>
           <tbody>{data.map((r) => (
             <tr key={r.id}>
@@ -21,7 +22,7 @@ export default function Runs() {
               <td className="small">{Object.entries(r.counts).map(([k, v]) => `${v} ${STATUS_LABEL[k]?.toLowerCase() || k}`).join(" · ")}</td>
               <td className="small">{new Date(r.created_at).toLocaleString()}</td>
             </tr>))}</tbody>
-        </table>
+        </table></div>
       )}
     </>
   );
