@@ -1,0 +1,6 @@
+interface:
+  display_name: "Design DNA"
+  short_description: "Scan a design into a verified, editable template"
+  default_prompt: "Scan this design with Design DNA, save it as a named template, rebuild it and report what was verified."
+policy:
+  allow_implicit_invocation: true

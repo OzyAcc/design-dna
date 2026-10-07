@@ -1,0 +1,193 @@
+{
+  "codex": {
+    "cli": "codex-cli 0.160.1",
+    "checks": [
+      {
+        "check": "codex skill folder: listed in the model-visible prompt",
+        "status": "verified",
+        "detail": "~/.agents/skills/reverse-design",
+        "steps": [
+          {
+            "cmd": "/usr/bin/python3 /home/user/design-dna/install.py install --no-deps --target codex",
+            "code": 0,
+            "out_tail": "[codex]\n  create <tmp>/codex/.agents/skills/reverse-design\n  installed 34 files, version 2.1.0-dev\n"
+          },
+          {
+            "cmd": "codex debug prompt-input hello",
+            "code": 0,
+            "out_tail": " }\n  },\n  {\n    \"type\": \"message\",\n    \"id\": \"msg_01a113d5-2601-79b0-add7-27952ed81cab\",\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"input_text\",\n        \"text\": \"hello\"\n      }\n    ],\n    \"internal_chat_message_metadata_passthrough\": {\n      \"turn_id\": \"auto-compact-0\",\n      \"create_time\": 1791334098.4330277,\n      \"content_item_kinds\": [\n        \"user.text\"\n      ]\n    }\n  }\n]\nWARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir \"/tmp\" (codex_home: AbsolutePathBuf(\"<tmp>/codex/.codex\"))\n"
+          }
+        ]
+      },
+      {
+        "check": "codex plugin: installed from the local marketplace and listed in the prompt",
+        "status": "verified",
+        "detail": "codex plugin marketplace add + codex plugin add design-dna@design-dna-local",
+        "steps": [
+          {
+            "cmd": "/usr/bin/python3 /home/user/design-dna/install.py install --no-deps --target codex --method plugin",
+            "code": 0,
+            "out_tail": "proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir \"/tmp\" (codex_home: AbsolutePathBuf(\"<tmp>/codex-plugin/.codex\"))\n    -> exit 0: Added plugin `design-dna` from marketplace `design-dna-local`.\nInstalled plugin root: <tmp>/codex-plugin/.codex/plugins/cache/design-dna-local/design-dna/2.1.0-dev\nWARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir \"/tmp\" (codex_home: AbsolutePathBuf(\"<tmp>/codex-plugin/.codex\"))\n"
+          },
+          {
+            "cmd": "codex plugin list",
+            "code": 0,
+            "out_tail": "Marketplace `design-dna-local`\n<tmp>/codex-plugin/design-dna/hosts/codex-marketplace/.agents/plugins/marketplace.json\n\nPLUGIN                       STATUS              VERSION    SOURCE\ndesign-dna@design-dna-local  installed, enabled  2.1.0-dev  <tmp>/codex-plugin/design-dna/hosts/codex-marketplace/plugins/design-dna\nWARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir \"/tmp\" (codex_home: AbsolutePathBuf(\"<tmp>/codex-plugin/.codex\"))\n"
+          },
+          {
+            "cmd": "codex debug prompt-input hello",
+            "code": 0,
+            "out_tail": ",\n  {\n    \"type\": \"message\",\n    \"id\": \"msg_01a113d5-27b6-7f73-a5f5-f44ae51ab6a0\",\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"input_text\",\n        \"text\": \"hello\"\n      }\n    ],\n    \"internal_chat_message_metadata_passthrough\": {\n      \"turn_id\": \"auto-compact-0\",\n      \"create_time\": 1791334098.870925,\n      \"content_item_kinds\": [\n        \"user.text\"\n      ]\n    }\n  }\n]\nWARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir \"/tmp\" (codex_home: AbsolutePathBuf(\"<tmp>/codex-plugin/.codex\"))\n"
+          }
+        ]
+      }
+    ]
+  },
+  "gemini-cli": {
+    "cli": "0.63.0",
+    "checks": [
+      {
+        "check": "gemini-cli skill folder: gemini skills list",
+        "status": "verified",
+        "detail": "~/.gemini/skills/reverse-design",
+        "steps": [
+          {
+            "cmd": "/usr/bin/python3 /home/user/design-dna/install.py install --no-deps --target gemini-cli",
+            "code": 0,
+            "out_tail": "[gemini-cli]\n  create <tmp>/gemini/.gemini/skills/reverse-design\n  installed 33 files, version 2.1.0-dev\n"
+          },
+          {
+            "cmd": "gemini skills list",
+            "code": 0,
+            "out_tail": "olour/photo\", \"keep everything else\", \"resize this to a story\", \"Arabic version of this ad\", \"export/import this template\", \"what makes this design work\", or names a saved Design DNA template \u2014 even if they never say \"Design DNA\". Not for designing from scratch with no reference (use a design skill) and not for reverse engineering software or binaries.\n  Location:    <tmp>/gemini/.gemini/skills/reverse-design/SKILL.md\n\nSkipping project agents due to untrusted folder. To enable, ensure that the project root is trusted.\nProject hooks disabled because the folder is not trusted.\n"
+          }
+        ]
+      },
+      {
+        "check": "gemini-cli extension: installed, skill listed from the extension, uninstalled",
+        "status": "verified",
+        "detail": "gemini extensions install <built folder> --consent (trust via --yes)",
+        "steps": [
+          {
+            "cmd": "gemini extensions validate --help",
+            "code": 0,
+            "out_tail": "gemini extensions validate <path>\n\nValidates an extension from a local path.\n\nPositionals:\n  path  The path of the extension to validate.  [string] [required]\n\nOptions:\n  -d, --debug  Run in debug mode (open debug console with F12)  [boolean] [default: false]\n  -h, --help   Show help  [boolean]\n"
+          },
+          {
+            "cmd": "/usr/bin/python3 /home/user/design-dna/install.py install --no-deps --target gemini-cli --method extension --yes",
+            "code": 0,
+            "out_tail": "ba5jt3p/gemini-ext/design-dna/hosts/gemini-extension/design-dna\n  $ gemini extensions install <tmp>/gemini-ext/design-dna/hosts/gemini-extension/design-dna --consent\n    -> exit 0: bout to install may have been created by a third-party developer and sourced from a public repository. Google does not vet, endorse, or guarantee the functionality or security of extensions. Please carefully inspect any extension and its source code before installing to understand the permissions it requires and the actions it may perform.\nExtension \"design-dna\" installed successfully and enabled.\n"
+          },
+          {
+            "cmd": "gemini skills list",
+            "code": 0,
+            "out_tail": ", or names a saved Design DNA template \u2014 even if they never say \"Design DNA\". Not for designing from scratch with no reference (use a design skill) and not for reverse engineering software or binaries.\n  Location:    <tmp>/gemini-ext/.gemini/extensions/design-dna/skills/reverse-design/SKILL.md\n\nSkipping project agents due to untrusted folder. To enable, ensure that the project root is trusted.\nLoading extension: design-dna\nScheduling MCP context refresh...\nExecuting MCP context refresh...\nMCP context refresh complete.\nProject hooks disabled because the folder is not trusted.\n"
+          },
+          {
+            "cmd": "/usr/bin/python3 /home/user/design-dna/install.py uninstall --target gemini-cli --method extension",
+            "code": 0,
+            "out_tail": "[gemini-cli]\n  remove the folder it was built in: <tmp>/gemini-ext/design-dna/hosts/gemini-extension\n  $ gemini extensions uninstall design-dna\n    -> exit 0: Extension \"design-dna\" successfully uninstalled.\ntemplates and bundles in <tmp>/gemini-ext/design-dna are never touched by uninstall\n"
+          },
+          {
+            "cmd": "gemini extensions list",
+            "code": 0,
+            "out_tail": "No extensions installed.\n"
+          }
+        ]
+      }
+    ]
+  },
+  "copilot": {
+    "cli": "GitHub Copilot CLI 1.0.92.",
+    "checks": [
+      {
+        "check": "copilot skill folder: copilot skill list (Personal skills)",
+        "status": "verified",
+        "detail": "~/.copilot/skills/reverse-design",
+        "steps": [
+          {
+            "cmd": "/usr/bin/python3 /home/user/design-dna/install.py install --no-deps --target copilot",
+            "code": 0,
+            "out_tail": "[copilot]\n  create <tmp>/copilot/.copilot/skills/reverse-design\n  installed 33 files, version 2.1.0-dev\n"
+          },
+          {
+            "cmd": "copilot skill list",
+            "code": 0,
+            "out_tail": "in skills:\n  customize-cloud-agent - Skill for customizing the Copilot cloud agent (formerly known as Copilot coding agent) environment, including copilot-setup-steps.yml configuration, preinstalling tools and dependencies, runners, and settings. Use when the user mentions copilot-setup-steps, copilot setup steps, or wants to configure the cloud agent environment.\n  github-pr-media - Upload an image or video to GitHub's user attachments API and embed it in a pull request description or comment. Use when asked to add screenshots, diagrams, recordings, or other media to a PR or GitHub comment.\n\n"
+          }
+        ]
+      },
+      {
+        "check": "copilot plugin: local marketplace install, skill listed, uninstalled",
+        "status": "verified",
+        "detail": "copilot plugin marketplace add + copilot plugin install design-dna@design-dna-local (Agent Plugins 1.0)",
+        "steps": [
+          {
+            "cmd": "/usr/bin/python3 /home/user/design-dna/install.py install --no-deps --target copilot --method plugin",
+            "code": 0,
+            "out_tail": "a-hosts-8ba5jt3p/copilot-plugin/design-dna/hosts/copilot-marketplace\n  $ copilot plugin marketplace add <tmp>/copilot-plugin/design-dna/hosts/copilot-marketplace\n  $ copilot plugin install design-dna@design-dna-local\n    -> exit 0: Marketplace \"design-dna-local\" added successfully.\n    -> exit 0: Plugin \"design-dna\" installed successfully. Installed 1 skill.\nEnabled \"design-dna@design-dna-local\". It is loaded live from <tmp>/copilot-plugin/design-dna/hosts/copilot-marketplace/plugins/design-dna, so edits take effect on the next session \u2014 nothing was copied.\n"
+          },
+          {
+            "cmd": "copilot plugin list",
+            "code": 0,
+            "out_tail": "Live Plugins (loaded from a local marketplace directory, never copied):\n  \u2022 design-dna@design-dna-local (v2.1.0-dev) (enabled)\n      from <tmp>/copilot-plugin/design-dna/hosts/copilot-marketplace\n"
+          },
+          {
+            "cmd": "copilot skill list",
+            "code": 0,
+            "out_tail": "in skills:\n  customize-cloud-agent - Skill for customizing the Copilot cloud agent (formerly known as Copilot coding agent) environment, including copilot-setup-steps.yml configuration, preinstalling tools and dependencies, runners, and settings. Use when the user mentions copilot-setup-steps, copilot setup steps, or wants to configure the cloud agent environment.\n  github-pr-media - Upload an image or video to GitHub's user attachments API and embed it in a pull request description or comment. Use when asked to add screenshots, diagrams, recordings, or other media to a PR or GitHub comment.\n\n"
+          },
+          {
+            "cmd": "/usr/bin/python3 /home/user/design-dna/install.py uninstall --target copilot --method plugin",
+            "code": 0,
+            "out_tail": "[copilot]\n  remove the folder it was built in: <tmp>/copilot-plugin/design-dna/hosts/copilot-marketplace\n  $ copilot plugin uninstall design-dna\n  $ copilot plugin marketplace remove design-dna-local\n    -> exit 0: Plugin \"design-dna@design-dna-local\" disabled. It is still on disk at <tmp>/copilot-plugin/design-dna/hosts/copilot-marketplace \u2014 nothing was removed.\n    -> exit 0: Marketplace \"design-dna-local\" removed successfully.\ntemplates and bundles in <tmp>/copilot-plugin/design-dna are never touched by uninstall\n"
+          },
+          {
+            "cmd": "copilot plugin list",
+            "code": 0,
+            "out_tail": "No plugins installed.\n\nUse 'copilot plugin install <source>' to install a plugin.\n"
+          }
+        ]
+      }
+    ]
+  },
+  "opencode": {
+    "cli": "1.18.35",
+    "checks": [
+      {
+        "check": "opencode skill folder: opencode debug skill",
+        "status": "verified",
+        "detail": "~/.config/opencode/skills/reverse-design",
+        "steps": [
+          {
+            "cmd": "/usr/bin/python3 /home/user/design-dna/install.py install --no-deps --target opencode",
+            "code": 0,
+            "out_tail": "[opencode]\n  create <tmp>/opencode/.config/opencode/skills/reverse-design\n  installed 33 files, version 2.1.0-dev\n"
+          },
+          {
+            "cmd": "opencode debug skill",
+            "code": 0,
+            "out_tail": "## Verification\\n\\nIn the repository (installed copies leave the suite out): `tests/run_acceptance.py` runs 32 checks in an\\nisolated store: 22 demonstrations plus 10 audit regressions. A 33rd entry, host-storage integration, is explicitly\\nmarked unverified. The run writes `report.md` (results grouped by kind) with the inputs and outputs it kept. Re-run\\nit after changing any script. `CAPABILITIES.md` at the repository root lists what is implemented, tested, partial\\nor unsupported; `docs/hosts/COMPATIBILITY.md` lists every AI tool this skill installs into and what was tested there.\\n\"\n  }\n]\n"
+          }
+        ]
+      }
+    ]
+  },
+  "claude-code": {
+    "cli": "2.1.292 (Claude Code)",
+    "checks": [
+      {
+        "check": "claude-code plugin: claude plugin validate on the repository",
+        "status": "verified",
+        "detail": ".claude-plugin/plugin.json + marketplace.json",
+        "steps": [
+          {
+            "cmd": "claude plugin validate /home/user/design-dna",
+            "code": 0,
+            "out_tail": "Validating marketplace manifest: /home/user/design-dna/.claude-plugin/marketplace.json\n\n\u221a Validation passed\n"
+          }
+        ]
+      }
+    ]
+  }
+}

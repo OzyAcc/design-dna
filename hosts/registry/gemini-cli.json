@@ -1,0 +1,102 @@
+{
+  "id": "gemini-cli",
+  "order": 7,
+  "name": "Gemini CLI",
+  "vendor": "Google",
+  "aliases": [
+    "gemini"
+  ],
+  "surfaces": [
+    {
+      "id": "gemini-skill",
+      "name": "Gemini CLI: skill folder",
+      "kind": "skill-dir",
+      "capability": "local-agent",
+      "native": true,
+      "default": true
+    },
+    {
+      "id": "gemini-extension",
+      "name": "Gemini CLI extension",
+      "kind": "plugin",
+      "package": "gemini-extension",
+      "capability": "local-agent",
+      "native": true,
+      "steps": [
+        "python install.py install --target gemini-cli --method extension",
+        "This builds ~/design-dna/hosts/gemini-extension/design-dna and, when gemini is on PATH, runs: gemini extensions install <that folder> --consent",
+        "Gemini CLI then asks whether to trust that folder; answer it in the terminal. Unattended runs need --yes, which trusts it for that one command (GEMINI_CLI_TRUST_WORKSPACE=true).",
+        "Restart Gemini CLI; /skills list shows reverse-design."
+      ]
+    }
+  ],
+  "skill_dirs": {
+    "user": "~/.gemini/skills",
+    "project": ".gemini/skills"
+  },
+  "reads": {
+    "user": [
+      "~/.gemini/skills",
+      "~/.agents/skills"
+    ],
+    "project": [
+      ".gemini/skills",
+      ".agents/skills"
+    ]
+  },
+  "detect": {
+    "paths": [
+      "~/.gemini"
+    ],
+    "commands": [
+      "gemini"
+    ]
+  },
+  "notes": "On activation Gemini CLI asks for consent and adds the skill folder to the allowed paths.",
+  "prerequisites": [
+    "Gemini CLI, signed in",
+    "Python 3.10+ and Chromium for the engine"
+  ],
+  "docs": [
+    {
+      "title": "Agent Skills (Gemini CLI)",
+      "url": "https://geminicli.com/docs/cli/skills/",
+      "method": "repo",
+      "commit": "google-gemini/gemini-cli@ef59c53 docs/cli/skills.md",
+      "facts": "Discovery tiers: built-in, extension, user (~/.gemini/skills or the ~/.agents/skills alias), workspace (.gemini/skills or .agents/skills). gemini skills list|install|uninstall; /skills list|reload. Activation asks for consent."
+    },
+    {
+      "title": "Extension reference",
+      "url": "https://geminicli.com/docs/extensions/reference/",
+      "method": "repo",
+      "commit": "google-gemini/gemini-cli@ef59c53 docs/extensions/reference.md",
+      "facts": "An extension has gemini-extension.json at its root; skills go in skills/<name>/SKILL.md. gemini extensions install <GitHub URL or local path> [--consent]; gemini extensions link <path>."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "verified",
+      "evidence": "skill folder and extension installed (Gemini CLI 0.63.0); extension uninstall verified; docs/hosts/EVIDENCE.md#gemini-cli"
+    },
+    "discovery": {
+      "status": "verified",
+      "evidence": "gemini skills list shows reverse-design [Enabled] from ~/.gemini/skills and from the extension; docs/hosts/EVIDENCE.md#gemini-cli"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    },
+    "scan": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    },
+    "persistence": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    },
+    "editing": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    }
+  }
+}

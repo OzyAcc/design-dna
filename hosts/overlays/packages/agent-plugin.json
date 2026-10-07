@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "design-dna",
+  "version": "{{VERSION}}",
+  "description": "Turn a visual reference into an evidence-backed, editable, persistent template; rebuild it measurably; adapt it without drift (skill: reverse-design).",
+  "author": {"name": "OzyAcc", "url": "https://github.com/OzyAcc"},
+  "homepage": "https://github.com/OzyAcc/design-dna",
+  "repository": "https://github.com/OzyAcc/design-dna",
+  "license": "MIT",
+  "keywords": ["design", "templates", "reverse-engineering", "typography", "svg", "arabic"]
+}

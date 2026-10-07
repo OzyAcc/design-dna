@@ -1,0 +1,59 @@
+{
+  "id": "claude-apps",
+  "order": 4,
+  "name": "Claude apps (web, desktop, mobile)",
+  "vendor": "Anthropic",
+  "surfaces": [
+    {
+      "id": "claude-apps-skill",
+      "name": "Custom skill upload (Free, Pro, Max, Team, Enterprise; code execution on)",
+      "kind": "upload",
+      "package": "claude-skill",
+      "capability": "hosted-sandbox",
+      "native": true,
+      "steps": [
+        "Turn on code execution in Claude's settings.",
+        "Open Customize, then Skills, and select Upload a skill.",
+        "Choose design-dna-claude-skill.zip. It holds one top-level folder, reverse-design/.",
+        "Team and Enterprise owners can provision the skill for the whole organization instead."
+      ]
+    }
+  ],
+  "prerequisites": [
+    "Any Claude plan with code execution turned on"
+  ],
+  "docs": [
+    {
+      "title": "Use skills in Claude",
+      "url": "https://support.claude.com/en/articles/12512180",
+      "method": "excerpt",
+      "facts": "Free, Pro, Max, Team and Enterprise; requires code execution. Customize > Skills > Upload a skill takes a ZIP of the skill folder. Uploads are private to the account; Team and Enterprise owners can provision skills for the organization."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "partial",
+      "evidence": "package built and checked against the Agent Skills rules; not uploaded: no claude.ai account access from the build environment; docs/hosts/EVIDENCE.md#claude-apps"
+    },
+    "discovery": {
+      "status": "untested",
+      "evidence": "no Claude apps account access from the build environment"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "no Claude apps account access from the build environment"
+    },
+    "scan": {
+      "status": "untested",
+      "evidence": "no Claude apps account access from the build environment"
+    },
+    "persistence": {
+      "status": "untested",
+      "evidence": "no Claude apps account access from the build environment"
+    },
+    "editing": {
+      "status": "untested",
+      "evidence": "no Claude apps account access from the build environment"
+    }
+  }
+}

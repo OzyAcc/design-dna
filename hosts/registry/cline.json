@@ -1,0 +1,78 @@
+{
+  "id": "cline",
+  "order": 9,
+  "name": "Cline",
+  "vendor": "Cline Bot",
+  "surfaces": [
+    {
+      "id": "cline-skill",
+      "name": "Cline (VS Code and JetBrains extension): skill folder",
+      "kind": "skill-dir",
+      "capability": "local-agent",
+      "native": true,
+      "default": true
+    }
+  ],
+  "skill_dirs": {
+    "user": "~/.cline/skills",
+    "project": ".cline/skills"
+  },
+  "reads": {
+    "user": [
+      "~/.cline/skills"
+    ],
+    "project": [
+      ".cline/skills",
+      ".clinerules/skills",
+      ".claude/skills"
+    ]
+  },
+  "detect": {
+    "paths": [
+      "~/.cline"
+    ],
+    "commands": [
+      "cline"
+    ]
+  },
+  "notes": "Skills can be toggled in the Skills tab (scale icon next to the model selector) and invoked with /reverse-design.",
+  "prerequisites": [
+    "Cline",
+    "Python 3.10+ and Chromium for the engine"
+  ],
+  "docs": [
+    {
+      "title": "Skills (Cline)",
+      "url": "https://docs.cline.bot/customization/skills",
+      "method": "repo",
+      "commit": "cline/cline@e5dd38d docs/customization/skills.mdx",
+      "facts": "Global ~/.cline/skills/ (C:\\Users\\USERNAME\\.cline\\skills\\ on Windows); project .cline/skills/, .clinerules/skills/, .claude/skills/. name must match the folder; description up to 1024 characters; use_skill tool or /<skill> slash command."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "partial",
+      "evidence": "the installer tests (Linux) put the skill, stamp and all files in the folder this host's documentation names; the host itself was not run; docs/hosts/EVIDENCE.md#cline"
+    },
+    "discovery": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "scan": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "persistence": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "editing": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    }
+  }
+}

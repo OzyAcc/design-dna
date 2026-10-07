@@ -1,0 +1,21 @@
+{
+  "name": "design-dna",
+  "version": "{{VERSION}}",
+  "description": "Turn a visual reference into an evidence-backed, editable, persistent template; rebuild it measurably; adapt it without drift, verified against the approved baseline.",
+  "author": {"name": "OzyAcc", "url": "https://github.com/OzyAcc"},
+  "homepage": "https://github.com/OzyAcc/design-dna",
+  "repository": "https://github.com/OzyAcc/design-dna",
+  "license": "MIT",
+  "keywords": ["design", "templates", "reverse-engineering", "typography", "svg", "arabic", "visual-regression"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Design DNA",
+    "shortDescription": "Scan a design into a verified, editable template",
+    "longDescription": "Measure a poster, ad or social post into an editable scene model with evidence for every value, rebuild it in a pinned renderer, and apply later edits as verified transactions that keep everything else unchanged.",
+    "developerName": "OzyAcc",
+    "category": "Creativity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/OzyAcc/design-dna",
+    "defaultPrompt": ["Scan this design and save it as a template", "Change only the headline and keep everything else"]
+  }
+}

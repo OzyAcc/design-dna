@@ -1,0 +1,48 @@
+{
+  "id": "instructions",
+  "order": 16,
+  "name": "Any chat assistant without skills (instruction kit)",
+  "vendor": "various",
+  "surfaces": [
+    {
+      "id": "instructions-kit",
+      "name": "Instruction kit for project instructions, custom GPTs, Gems, spaces and similar",
+      "kind": "instructions",
+      "package": "instructions-kit",
+      "capability": "instructions-only",
+      "native": false,
+      "steps": [
+        "Download design-dna-instructions-kit.zip and unzip it.",
+        "Paste INSTRUCTIONS.md into the assistant's custom instructions (project, GPT, Gem or space).",
+        "Attach the files in knowledge/ where the assistant accepts reference files.",
+        "Expect labelled estimates, not measurements: see the capability table."
+      ]
+    }
+  ],
+  "prerequisites": [
+    "An assistant that accepts custom instructions"
+  ],
+  "docs": [],
+  "testing": {
+    "install": {
+      "status": "partial",
+      "evidence": "kit built; INSTRUCTIONS.md length checked against the 8,000-character custom-GPT limit; docs/hosts/EVIDENCE.md#instruction-kit"
+    },
+    "discovery": {
+      "status": "not_applicable"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "the kit was not pasted into a live assistant from the build environment"
+    },
+    "scan": {
+      "status": "not_applicable"
+    },
+    "persistence": {
+      "status": "not_applicable"
+    },
+    "editing": {
+      "status": "not_applicable"
+    }
+  }
+}

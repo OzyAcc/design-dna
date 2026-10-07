@@ -1,0 +1,49 @@
+{
+  "schema": "design-dna/host-registry@1",
+  "checked": "2026-10-07",
+  "skill": {
+    "name": "reverse-design",
+    "source": "skills/reverse-design",
+    "exclude": ["tests", "__pycache__", "*.pyc", ".design-dna-install.json"],
+    "python_requirements": "skills/reverse-design/requirements.txt"
+  },
+  "doc_methods": {
+    "repo": "read in the vendor's public documentation repository at the commit named",
+    "excerpt": "read from search-engine excerpts of the vendor's official page (the build environment's network policy blocked the page itself)",
+    "live": "observed by running the host in the build environment"
+  },
+  "test_status": {
+    "verified": "observed working in the build environment; evidence linked",
+    "partial": "part of the stage was observed; the evidence says which part",
+    "untested": "no access to the host from the build environment; nothing is claimed",
+    "not_applicable": "the stage does not exist on this surface"
+  },
+  "test_stages": ["install", "discovery", "invocation", "scan", "persistence", "editing"],
+  "features": [
+    {"id": "guidance", "name": "Method guidance: scan categories, evidence statuses, honest claims", "needs": "instructions only"},
+    {"id": "intake", "name": "Intake: source hash, metadata, canonical sRGB copy, skeleton template", "needs": "Python 3.10+ with Pillow"},
+    {"id": "measure", "name": "Measurement: ink boxes, profiles, edges, radius, shadow, role colours", "needs": "Python with numpy, Pillow, scikit-image, scipy"},
+    {"id": "validate", "name": "Validation, annotated scan, scan report, bundles", "needs": "Python with jsonschema, Pillow, fontTools"},
+    {"id": "fonts", "name": "Font candidate ranking and render-fitted typography", "needs": "Python packages, a Chromium that Playwright can launch, candidate font files"},
+    {"id": "render", "name": "Reconstruct, pixel and region verification, PNG + SVG export with round trip", "needs": "Python packages and Chromium"},
+    {"id": "edit", "name": "Controlled edits verified against the previous revision and the approved baseline", "needs": "Python packages and Chromium"},
+    {"id": "persist", "name": "Template persistence across sessions", "needs": "a writable store that outlives the session (~/design-dna), or .dnab bundles the user keeps"}
+  ],
+  "capability_classes": {
+    "local-agent": {
+      "label": "Local agent with a shell",
+      "summary": "Runs the engine on your machine. Everything works once the Python packages and a Chromium browser are installed; python install.py doctor checks both.",
+      "features": {"guidance": "yes", "intake": "yes", "measure": "yes", "validate": "yes", "fonts": "yes, with Chromium", "render": "yes, with Chromium", "edit": "yes, with Chromium", "persist": "yes: ~/design-dna plus bundles"}
+    },
+    "hosted-sandbox": {
+      "label": "Hosted code sandbox",
+      "summary": "The scripts run in the vendor's container. Which packages and browsers it has is not documented for this skill and was not tested; scripts/capabilities.py reports it at the start of a chat. Files do not outlive the sandbox, so download exported bundles.",
+      "features": {"guidance": "yes", "intake": "expected; untested", "measure": "expected if numpy, scikit-image and scipy are present; untested", "validate": "expected; untested", "fonts": "only if the sandbox can launch Chromium; untested", "render": "only if the sandbox can launch Chromium; untested", "edit": "only if the sandbox can launch Chromium; untested", "persist": "no: download bundles and upload them again"}
+    },
+    "instructions-only": {
+      "label": "Instructions only (fallback)",
+      "summary": "No code runs. The assistant follows the Design DNA method by eye. Nothing is measured, rendered or verified, and every value is an estimate that it must label as one.",
+      "features": {"guidance": "yes", "intake": "no", "measure": "no: visual estimates, labelled inferred", "validate": "no", "fonts": "no", "render": "no", "edit": "no: described changes, not verified ones", "persist": "no: keep the scene JSON and passport the assistant writes"}
+    }
+  }
+}

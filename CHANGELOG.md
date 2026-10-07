@@ -5,9 +5,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-The acceptance suite runs off Windows: the first open item of the audit response.
+Design DNA installs in every AI tool that can load it, starting with ChatGPT, from one skill and one engine; and
+the acceptance suite runs off Windows (the first open item of the audit response).
 
 ### Added
+- **Choose your AI tool**: ChatGPT (Skills upload for Business, Enterprise, Healthcare and Edu; Codex for every
+  plan; a labelled instruction kit for Free, Plus and Pro), Codex, Claude Code, the Claude apps, Cursor, GitHub
+  Copilot, Gemini CLI, Windsurf, Cline, Roo Code, OpenCode, Kiro, Junie, Goose, any host reading `.agents/skills`,
+  and any assistant without skills. One guide per tool in `docs/hosts/`.
+- **Compatibility registry** (`hosts/registry/*.json`): per host, the surfaces, install method, skill folders it
+  reads, capability level, prerequisites, documentation sources (with how and when each was read) and test status
+  per stage (install, discovery, invocation, scan, persistence, editing). `docs/hosts/COMPATIBILITY.md`, the guides
+  and the README table are generated from it (`python install.py docs`; CI fails when they are stale).
+- **Generated packages** from the canonical skill: ChatGPT and Claude skill zips (with hosted-sandbox notes), a
+  plain skill zip, a Codex plugin with its marketplace, an Agent Plugins 1.0 package (Copilot), a Gemini CLI
+  extension and the instruction kit (`python install.py package`). The `hosts` workflow attaches them to releases.
+- **`install.py`**: `list`, `install`, `update`, `uninstall`, `doctor`, `package`, `docs`; target selection
+  (ids, `detected`, `all`), user or project scope, `--dry-run`, skill folders or the host's own plugin and
+  extension commands. Installed copies carry a stamp with every file's hash: update and uninstall touch only
+  unmodified copies they installed, refuse otherwise, and `--force` moves to a backup instead of deleting.
+  `doctor` checks Python, packages, Chromium and the store, and lists every copy each host can see, flagging
+  duplicates. `install.sh` / `install.ps1` wrap it and still default to Claude Code.
+- `docs/hosts/EVIDENCE.md`: AI-host results (Claude Code verified end to end in two fresh sessions; Codex, Gemini
+  CLI, Copilot and OpenCode discovery verified with their own CLIs) kept separate from operating-system results.
+- `hosts/tests/`: installer and package tests for every target, and a host-discovery script that asks each host
+  CLI what it sees.
 - **Portable font set** for the acceptance suite (`tests/fixtures/fontset.py`, `tests/fonts/`): Liberation Sans/Serif
   Bold, DejaVu Sans/Serif Bold, Carlito Bold, Caladea Bold, Amiri Bold and Open Sans [wdth,wght], unmodified, with
   their SIL OFL 1.1 / Bitstream Vera licences and sha256 list. Every font role (the layered reference's sans and
@@ -18,11 +40,19 @@ The acceptance suite runs off Windows: the first open item of the audit response
 - CI job `acceptance-linux` (ubuntu-latest, `requirements-lock.txt`, portable fonts, its own evidence artifact).
 
 ### Changed
+- `SKILL.md` declares `license` and `compatibility` (Agent Skills fields) and points at the repository for the
+  acceptance suite, which installed copies leave out.
+- `docs/CHATGPT-WORK.md` (an untested adaptation note) is replaced by `docs/hosts/chatgpt.md`.
 - T02's caption baselines are held at the ink measurement and only size and x are render-fitted. The model's
   provenance already declared the baseline as measured from ink; fitting it against a substitute font had moved
   it by up to 1 px towards the substitute's glyph shapes.
 - T21 uses any second installed browser channel (Edge, Chrome or Playwright's Chromium) for the real drift check,
   not only Edge; with none it stays unverified.
+- `annotate_scan.py` no longer crashes on text nodes whose baseline is not measured yet (found by the Claude Code
+  end-to-end run).
+- Library lookup (`fetch`, `bundle.py get`): when two bundles of a template were exported in the same second, the
+  choice depended on file-name order and could pick the font-referenced bundle, which fails to import where its
+  fonts are not installed (seen as a T20 crash cascading into T21-T32). Ties now go to the self-contained bundle.
 - T20 resolves the font-referenced bundle's fonts from the font set's folder (`font_dirs`) as well as the system
   font folders.
 

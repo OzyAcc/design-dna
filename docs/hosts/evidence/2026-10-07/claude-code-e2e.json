@@ -1,0 +1,177 @@
+{
+  "host": "claude-code",
+  "date": "2026-10-07",
+  "install": "python install.py install --target claude-code -> ~/.claude/skills/reverse-design",
+  "isolation": "fresh claude -p processes; session A store-a, session B an empty store-b; templates passed only through ./library bundles",
+  "sessions": [
+    {
+      "session": "A: discover, invoke, scan, export",
+      "claude_code": "2.1.292",
+      "skill_listed_at_start": true,
+      "slash_command_listed": true,
+      "first_tool_call": {
+        "tool": "Skill",
+        "input": "reverse-design"
+      },
+      "tool_calls": [
+        {
+          "tool": "Skill",
+          "input": "reverse-design"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd <work>; ls; S=/root/.claude/skills/reverse-design; ls $S $S/scripts $S/references; python3 $S/scripts/capabilities.py | head -30"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd <work>; S=/root/.claude/skills/reverse-design; ls library store-a store-b; python3 $S/scripts/dna.py 'scan \"poster.png\" as \"E2E Poster\"'; cat $S/references/scene-model.md | head -150"
+        },
+        {
+          "tool": "Read",
+          "input": "<work>/poster.png"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd <work>; S=/root/.claude/skills/reverse-design; env | grep DESIGN; cat $S/references/scan-contract.md; for s in measure sample_colors annotate_scan validate_model; do python3 $S/scripts/$s.py -h | head -30; done; cat store-a/templates/e2e-poster/scene.json | head -80"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd <work>; S=/root/.claude/skills/reverse-design/scripts; T=e2e-poster\npython3 $S/measure.py $T profile --region 0,0,1080,1350 --axis y --min-gap 20 | tail -30\nfor r in \"60,90,200,30:accent_bar\" \"60,130,300,60:eyebrow\" \"60,200,880,220:headline\" \"850,1140,180,130:logo\"; do echo ${r#*:}; python3 $S/measure.py $T ink --region ${r%%:*} --bg auto --object ${r#*:} | tail -12; done\npython3 $S/measure.py $T edges --start 100,740 --direction right --length 300 | tail -8\npython3 $S/measure.py $T edges --start 540,380 --direction down --length 700 | tail -8\npython3 $S/measure.py $T ink --region 60,1130,4"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd <work>; S=/root/.claude/skills/reverse-design/scripts; T=e2e-poster\npython3 $S/measure.py $T edges --start 200,400 --direction down --length 700 --min-step 4| tail -12\npython3 $S/measure.py $T edges --start 100,700 --direction right --length 900 --min-step 4| grep -E '\"canvas\"|first|last'\npython3 $S/measure.py $T ink --region 60,1130,330,140 --bg auto --object cta | grep -A5 ink_box\npython3 $S/sample_colors.py $T --apply --sample background.paper=20,20,40,40 --sample background.paper=1020,1300,40,40 --sample accent.primary=90,102,40,6 --sample cta.fill=100,1170,40,10 --sample card.top=200,4"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd <work>; S=/root/.claude/skills/reverse-design/scripts; T=e2e-poster; D=store-a/templates/$T\npython3 -c \"\nimport json;e=json.load(open('$D/evidence/evidence.json'));e=e.get('records',e) if isinstance(e,dict) else e\nprint(type(e),len(e));\nfor r in (e.values() if isinstance(e,dict) else e): print(r.get('evidence_id'),r.get('object'),r.get('method'))\ns=json.load(open('$D/scene.json'));print(json.dumps(s['scan'],indent=1)[:1500]);print(json.dumps(s['tokens']['cta.fill'])[:400]);print([k for k in s]);print(json.dumps(s['communication'],indent=0)[600:1800])\"\npython3 $S/validate_model.py $T | tail "
+        },
+        {
+          "tool": "Bash",
+          "input": "cd <work>; S=/root/.claude/skills/reverse-design/scripts; T=e2e-poster; D=store-a/templates/$T\ncat > ../edit.py <<'EOF'\nimport json,sys\nD=sys.argv[1]\ns=json.load(open(D+'/scene.json'))\ndef prov(ev,st='measured',c='high',note=None):\n    d={'*':{'status':st,'confidence':c,'evidence_ids':ev}}\n    if note:d['*']['note']=note\n    return d\ndef node(id,type,role,box,ev,**kw):\n    n={'id':id,'type':type,'role':role,'geometry':dict(zip('xywh',box),rotation=0),'visible':True,'opacity':1,\n       'editability':'raster','provenance':prov(ev)}\n    n.update(kw);return n\ns['nodes']=[\n node('accent_bar','shape"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd /root/.claude/skills/reverse-design/schemas; python3 - <<'EOF'\nimport json;s=json.load(open('scene.schema.json'))\nd=s.get('$defs',s.get('definitions'))\nfor k in d:\n    if 'font' in k.lower() or 'text' in k.lower(): print(k,json.dumps(d[k])[:1500])\nEOF"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd <work>; S=/root/.claude/skills/reverse-design/scripts; T=e2e-poster; D=store-a/templates/$T\npython3 - <<'EOF'\nimport json\nD='store-a/templates/e2e-poster'\ns=json.load(open(D+'/scene.json'))\nunk={'status':'unknown','candidates':[],'evidence_ids':[],'resolving_probe':'font_candidates.py with supplied font files'}\nfor n in s['nodes']:\n    if n['id']=='eyebrow':\n        n.update(content='NEW SEASON',font={'family':'sans-serif','weight':700,'size':26,'identity':unk},align='left',first_baseline=172,line_height=26,fill={'token':'text.muted'})\n    if n['id']=='headline':\n        n.update(content='C"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd <work>; S=/root/.claude/skills/reverse-design/scripts; python3 $S/dna.py 'export-template \"E2E Poster\" to ./library' | tail -15; ls library"
+        }
+      ],
+      "turns": 14,
+      "cost_usd": 0.3451,
+      "is_error": false,
+      "final_report": "I scanned `poster.png` as \"E2E Poster\" and exported it to `./library`. `validate_model.py` says **VALID**, but with warnings.\n\n**Template id:** `e2e-poster`. The bundle is `library/e2e-poster@20261007T004747.dnab` (15 files, 257 KB).\n\n**Commands run** (scripts are in `/root/.claude/skills/reverse-design/scripts/`, store `store-a`):\n1. `capabilities.py`. Chromium 141 is available, and OCR and font identification are unsupported here.\n2. `dna.py 'scan \"poster.png\" as \"E2E Poster\"'` was the intake. The poster is 1080×1350 PNG (4:5), RGB, with no ICC profile (assumed sRGB, inferred).\n3. `measure.py` composition and element boxes:\n   - `profile --axis y` found 100px top and bottom margins, an 80px left margin and four gaps (40, 56, 126, 100px).\n   - `ink` was run on the accent bar (80,100, 120×12), eyebrow, headline, logo (880,1166, 120×84) and CTA.\n   - `edges` was run on the hero card, giving x 140–940 and y 430–1050.\n4. `sample_colors.py --apply` sampled eight role tokens:\n\n   | Role | Value |\n   |---|---|\n   | Paper | background.paper (value not shown in the output) |\n   | Accent | accent.primary (value not shown in the output) |\n   | CTA fill | `#C8102E` |\n   | Card top | `#EEE1CE` |\n   | Card bottom | `#DBCAB0` |\n   | Product body | `#82482A` |\n   | Primary text | `#1F1A17` (ink-core) |\n   | Muted text | `#6B5E55` (ink-core) |\n5. I wrote the measured values into the scene and passport:\n   - **Nodes:** six, with provenance and evidence ids.\n   - **Coverage:** `composition`, `element_inventory`, `geometry` and `color` entries.\n   - **Passport:** character, goal, theme, usage, message and mechanism, labelled suggested, observed or inferred.\n6. `annotate_scan.py e2e-poster` wrote `annotated.png` and `scan_report.md`. The first run crashed on the text nodes, which had no `first_baseline`. It passed once I added them.\n7. `validate_model.py e2e-poster` returned VALID.\n8. `dna.py 'export-template \"E2E Poster\" to ./library'` wrote the bundle.\n\n**Validation warnings:**\n- The eyebrow and headline text nodes use placeholder font sizes and baselines. They are not fitted, because I did not run `fit_text.py` or `font_candidates.py`. The font is `sans-serif` or `serif`, not pinned to a file, and its identity is `unknown`.\n- The logo is a rough M-shaped path, inferred, with only its bounding box measured.\n- Ten of the 16 categories have no result. These are `typography`, `image_treatment`, `depth_compositing`, `surface_texture`, `lighting`, `hierarchy_attention`, `message_mechanism`, `character_theme`, `usage_context` and `output_requirements`.\n- The `composition`, `geometry` and `color` categories have no facet entries.\n- Editability is \"incomplete\".\n- The CTA pill's right edge (440) is read from the image, not measured, because a translucent circle overlaps it. Its radius, the card's radius and shadow, the bag illustration and the circle are not modelled either.\n- I did not run `reconstruct`, so readiness is still `scan_in_progress` and no baseline is approved. That matches the partial scan you asked for."
+    },
+    {
+      "session": "B: fetch in a new process, controlled edit, export",
+      "claude_code": "2.1.292",
+      "skill_listed_at_start": true,
+      "slash_command_listed": true,
+      "first_tool_call": {
+        "tool": "Skill",
+        "input": "reverse-design"
+      },
+      "tool_calls": [
+        {
+          "tool": "Skill",
+          "input": "reverse-design"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd /root/.claude/skills/reverse-design && ls; ls scripts | head -30; pwd; ls ./library 2>&1 | head; ls <work>/library 2>&1 | head; echo $DESIGN_DNA_HOME"
+        },
+        {
+          "tool": "Bash",
+          "input": "pwd; ls -la; ls -la library $DESIGN_DNA_HOME 2>&1 | head -30; find / -name \"*.dnab\" -not -path \"*/proc/*\" 2>/dev/null | head"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd /root/.claude/skills/reverse-design/scripts; W=<work>; export DESIGN_DNA_HOME=$W/store-b; python3 dna.py 'fetch \"E2E Poster\" from '$W/library 2>&1 | head -60"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd /root/.claude/skills/reverse-design/scripts; W=<work>; export DESIGN_DNA_HOME=$W/store-b; ls $DESIGN_DNA_HOME/templates/e2e-poster; python3 dna.py 'show \"E2E Poster\"' 2>&1 | head -80"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd /root/.claude/skills/reverse-design/scripts; W=<work>; export DESIGN_DNA_HOME=$W/store-b; python3 dna.py 'status \"E2E Poster\"' 2>&1 | head -60; python3 dna.py 'inspect \"E2E Poster\"' 2>&1 | head -120"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd $DESIGN_DNA_HOME 2>/dev/null; cd <work>/store-b/templates/e2e-poster; grep -o '\"readiness[^,]*,' -r scene.json passport.json | head; python3 -c \"\nimport json;s=json.load(open('scene.json'));print([k for k in s]);print(s.get('baseline'),s.get('readiness'))\""
+        },
+        {
+          "tool": "Bash",
+          "input": "cd /root/.claude/skills/reverse-design/scripts; W=<work>; export DESIGN_DNA_HOME=$W/store-b\npython3 dna.py 'fetch \"Editorial Product Spotlight\" from '$W/library 2>&1 | head -20\npython3 dna.py 'use \"Editorial Product Spotlight\" for task \"Headline test\"' 2>&1 | head -40"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd /root/.claude/skills/reverse-design/scripts; W=<work>; export DESIGN_DNA_HOME=$W/store-b\npython3 dna.py 'set headline.content = \"Made for\\nevery day.\" keep everything else' 2>&1 | head -120"
+        },
+        {
+          "tool": "Bash",
+          "input": "cd $DESIGN_DNA_HOME 2>/dev/null; cd <work>/store-b/templates/editorial-product-spotlight/variants/headline-test-2; ls -R . | head -30; python3 -c \"\nimport json;t=json.load(open('transactions/txn-0001.json'));print(json.dumps(t,indent=1)[:3500])\""
+        },
+        {
+          "tool": "Bash",
+          "input": "cd <work>/store-b/templates/editorial-product-spotlight/variants/headline-test-2; python3 -c \"\nimport json;t=json.load(open('transactions/txn-0001.json'));v=t['verification']\nprint([k for k in v]);print(json.dumps({k:v[k] for k in v if k not in('model_changes','renders','renderer','approved_baseline','requested_edits')},indent=1)[:3500])\""
+        },
+        {
+          "tool": "Bash",
+          "input": "cd /root/.claude/skills/reverse-design/scripts; export DESIGN_DNA_HOME=<work>/store-b\npython3 dna.py 'export formats=png' 2>&1 | head -40"
+        }
+      ],
+      "turns": 14,
+      "cost_usd": 0.2447,
+      "is_error": false,
+      "final_report": "All three steps ran. I fetched both templates into the store at `./store-b`, because the default store was empty.\n\n## 1. E2E Poster\n- **Readiness:** `scan_in_progress`. There is no approved baseline yet.\n- **Categories with evidence (5 of 13 reported):**\n  - Input canvas: measured, 1080×1350.\n  - Composition: measured, and the note says the grid and alignment facets are not completed.\n  - Element inventory: observed. Six main elements are boxed; the bag illustration, translucent circle and shadows are not yet nodes.\n  - Geometry: measured for element boxes. Radii and rotation are not measured.\n  - Color: measured, with role tokens sampled from clean patches.\n- **Responsive system:** `unknown`, because a single still can't show breakpoints.\n- **Missing (7):** typography, image treatment, depth and compositing, surface texture, lighting, hierarchy and attention, and message mechanism. Character and theme, usage context, and output requirements are also missing.\n\n`inspect` printed 13 categories, so I can't confirm the full list of 16 from this run.\n\n## 2. Editorial Product Spotlight, variant \"Headline test\"\n- **Variant:** the store already had a `headline-test` variant, so this one was created as `headline-test-2`. It inherits readiness `exact_pixels`.\n- **Transaction:** `committed` as revision 1, with verification `pass`. The renderer matched the pinned one.\n- **Model paths changed:** only `nodes.n-headline.content`, from \"Carry the\\nquiet confidence.\" to \"Made for\\nevery day.\". That was 1 of 538 leaf paths, with no frozen-path violations. The headline fits at size 84 on 2 lines.\n- **Pixels changed outside the headline:** 0 against the approved baseline.\n  - Against the previous revision, the report names the approved baseline as its comparison. The previous revision is the baseline itself (revision 0), so the two figures are the same.\n  - Inside the headline's influence area, 32,696 pixels changed, which is about 3.7% of the canvas.\n  - The hero node shows 172 changed pixels. They sit inside the headline's influence area, where its anti-aliased edges overlap. Its properties are unchanged.\n\n## 3. PNG export\n`store-b/templates/editorial-product-spotlight/variants/headline-test-2/exports/rev-0001/headline-test.png`\n\nI exported PNG only, as you asked, so there is no SVG and no manifest. The pinned-renderer check passed.\n\nI did not export a bundle of the new variant. Say if you want one saved to `./library`."
+    }
+  ],
+  "checked_from_files": {
+    "session_b_transaction": {
+      "transaction_status": "committed",
+      "scope": {
+        "keep": "everything_else"
+      },
+      "actual_changed_paths": [
+        "nodes.n-headline.content"
+      ],
+      "frozen_violations": [],
+      "outside_influence_vs_previous": 0,
+      "outside_influence_vs_approved_baseline": 0,
+      "compared_against": "approved template baseline baseline/rev-0000/baseline.png",
+      "requested_edits": [
+        [
+          "nodes.n-headline.content",
+          "pass"
+        ]
+      ]
+    },
+    "e2e_poster_imported_from_bundle": [
+      {
+        "bundle": "e2e-poster@20261007T004747.dnab",
+        "at": "2026-10-07T00:49:50+00:00",
+        "exported_at": "2026-10-07T00:47:47+00:00"
+      }
+    ],
+    "bundles_in_library": [
+      "e2e-poster@20261007T004747.dnab",
+      "editorial-product-spotlight@20261007T000555.dnab"
+    ]
+  },
+  "prompts": {
+    "A": "In this folder there is poster.png. Use the Design DNA skill to scan it and save it as a template named \"E2E Poster\": run the intake, then measure the composition and the main element boxes and sample the role colours with the skill tools, record what you measured in the scene, and run annotate_scan.py and validate_model.py. A complete 16-category scan and a reconstruction are not needed for this test. Finally export the template to ./library with export-template. Report the template id, the commands you ran and the validation result.",
+    "B": "Use the Design DNA skill. The template store is empty; saved templates are bundles in ./library. 1) Fetch the template \"E2E Poster\" from ./library and tell me its readiness and which scan categories it covers. 2) Fetch \"Editorial Product Spotlight\" from ./library, start a variant for the task \"Headline test\", and change only the headline to \"Made for\\nevery day.\" keeping everything else. Report the transaction status, which model paths changed, and how many pixels changed outside the headline, both against the previous revision and against the approved baseline. 3) Export the variant as PNG."
+  },
+  "command": "DESIGN_DNA_HOME=<store> claude -p \"<prompt>\" --output-format stream-json --verbose --max-turns 60 --allowedTools \"Skill Bash Read Write Edit Glob Grep\"",
+  "inputs": {
+    "poster.png": "the acceptance suite's rendered reference poster (1080x1350)",
+    "library": "editorial-product-spotlight bundle exported by acceptance T20, plus whatever session A exported"
+  }
+}

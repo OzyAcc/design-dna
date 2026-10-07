@@ -132,6 +132,10 @@ T23 is unverified by design.
   caption regions fail and are reported; readiness stays `partial_baseline`.
 - T10 determinism, T20 bundle round-trip and T22 SVG round-trip hold with 0 differing pixels on this renderer too.
 
+**Re-run after the host packaging work: `20261007-005538`, 31/31 passed, 2 unverified**, with two engine fixes: an
+in-progress scan no longer crashes `annotate_scan.py`, and library lookups break export-time ties in favour of the
+self-contained bundle (a same-second export pair had made T20 import the font-referenced bundle and fail).
+
 The CI workflow gains an `acceptance-linux` job (ubuntu-latest, portable fonts, `requirements-lock.txt`). It runs
 on the next push to `main` or pull request; its results are not part of this report yet. macOS is untested.
 

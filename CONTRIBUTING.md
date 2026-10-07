@@ -49,3 +49,12 @@ acceptance test. "Supported" means demonstrated, not planned.
 
 Use the issue templates. Attach the `report.json` of the failing comparison or the rejected transaction
 (`variants/<id>/rejected/*.json`): they contain the evidence needed to reproduce.
+
+## Adding or updating an AI tool
+
+Hosts live in `hosts/registry/<id>.json`. Add the folders the tool reads (from its documentation, with the source
+and how you read it), its install surfaces and its capability level, then run `python install.py docs` and
+`python -m unittest discover -s hosts/tests`. Mark a test stage `verified` only with evidence you observed;
+everything else stays `untested`. If the tool has a CLI that can list skills without signing in, add a check to
+`hosts/tests/host_discovery.py`.
+

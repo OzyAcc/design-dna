@@ -1,0 +1,80 @@
+{
+  "id": "opencode",
+  "order": 11,
+  "name": "OpenCode",
+  "vendor": "SST / Anomaly",
+  "surfaces": [
+    {
+      "id": "opencode-skill",
+      "name": "OpenCode (TUI, desktop, IDE): skill folder",
+      "kind": "skill-dir",
+      "capability": "local-agent",
+      "native": true,
+      "default": true
+    }
+  ],
+  "skill_dirs": {
+    "user": "~/.config/opencode/skills",
+    "project": ".opencode/skills"
+  },
+  "reads": {
+    "user": [
+      "~/.config/opencode/skills",
+      "~/.claude/skills",
+      "~/.agents/skills"
+    ],
+    "project": [
+      ".opencode/skills",
+      ".claude/skills",
+      ".agents/skills"
+    ]
+  },
+  "detect": {
+    "paths": [
+      "~/.config/opencode"
+    ],
+    "commands": [
+      "opencode"
+    ]
+  },
+  "notes": "OpenCode recognises only name, description, license, compatibility and metadata in the frontmatter; other fields are ignored.",
+  "prerequisites": [
+    "OpenCode with a configured model provider",
+    "Python 3.10+ and Chromium for the engine"
+  ],
+  "docs": [
+    {
+      "title": "Agent Skills (OpenCode)",
+      "url": "https://opencode.ai/docs/skills/",
+      "method": "repo",
+      "commit": "sst/opencode@ecc4916 packages/web/src/content/docs/skills.mdx",
+      "facts": "Project .opencode/skills, .claude/skills and .agents/skills (walking up to the git worktree); global ~/.config/opencode/skills, ~/.claude/skills and ~/.agents/skills. Name rules match the Agent Skills spec; loaded through the native skill tool; permissions in opencode.json."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "verified",
+      "evidence": "install.py put the skill in ~/.config/opencode/skills (OpenCode 1.18.35); docs/hosts/EVIDENCE.md#opencode"
+    },
+    "discovery": {
+      "status": "verified",
+      "evidence": "opencode debug skill lists reverse-design at that location; docs/hosts/EVIDENCE.md#opencode"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    },
+    "scan": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    },
+    "persistence": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    },
+    "editing": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    }
+  }
+}

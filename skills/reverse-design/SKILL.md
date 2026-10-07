@@ -1,6 +1,8 @@
 ---
 name: reverse-design
 description: Design DNA — turn a visual reference (poster, social post, ad, banner, flyer, product card, UI screenshot) into an evidence-backed, editable, persistent named template; rebuild it measurably; then adapt it (new copy, product photo, colours, Arabic, new size) without design drift, with verification against the approved baseline. Use whenever the user says "scan this design", "reverse engineer this poster/ad/post", "make a template from this", "recreate/rebuild this exactly", "use this layout for my product", "same design but…", "change only the headline/colour/photo", "keep everything else", "resize this to a story", "Arabic version of this ad", "export/import this template", "what makes this design work", or names a saved Design DNA template — even if they never say "Design DNA". Not for designing from scratch with no reference (use a design skill) and not for reverse engineering software or binaries.
+license: MIT
+compatibility: Needs Python 3.10+ with the packages in requirements.txt for intake and measurement, plus a Chromium browser that Playwright can launch for font fitting, rendering, verification and edits. Without code execution only the method guidance applies.
 ---
 
 # Design DNA
@@ -98,7 +100,8 @@ want to change is a conflict until you `unlock` it.
 
 ## Verification
 
-`tests/run_acceptance.py` runs 32 checks in an isolated store: 22 demonstrations plus 10 audit regressions. A
-33rd entry, host-storage integration, is explicitly marked unverified. The run writes `report.md` (results
-grouped by kind) with the inputs and outputs it kept. Re-run it after changing any script.
-`CAPABILITIES.md` at the package root lists what is implemented, tested, partial or unsupported.
+In the repository (installed copies leave the suite out): `tests/run_acceptance.py` runs 32 checks in an
+isolated store: 22 demonstrations plus 10 audit regressions. A 33rd entry, host-storage integration, is explicitly
+marked unverified. The run writes `report.md` (results grouped by kind) with the inputs and outputs it kept. Re-run
+it after changing any script. `CAPABILITIES.md` at the repository root lists what is implemented, tested, partial
+or unsupported; `docs/hosts/COMPATIBILITY.md` lists every AI tool this skill installs into and what was tested there.

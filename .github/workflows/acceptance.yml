@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
       - run: pip install pyflakes jsonschema
       - name: pyflakes
-        run: python -m pyflakes skills/reverse-design/scripts skills/reverse-design/tests
+        run: python -m pyflakes skills/reverse-design/scripts skills/reverse-design/tests hosts install.py
       - name: schemas are valid JSON Schema 2020-12
         run: |
           python - <<'EOF'
