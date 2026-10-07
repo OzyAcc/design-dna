@@ -1,0 +1,70 @@
+name: dashboard
+
+on:
+  push:
+    branches: [main]
+    paths: ["dashboard/**", "skills/**", ".github/workflows/dashboard.yml"]
+  pull_request:
+    paths: ["dashboard/**", "skills/**", ".github/workflows/dashboard.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DNA_TEST_EVIDENCE: ${{ github.workspace }}/dashboard-evidence
+      DNA_REQUIRE_UI_TEST: "1"
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/web/package-lock.json
+      - name: web app (typecheck + build)
+        working-directory: dashboard/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r dashboard/requirements.txt pyflakes
+      - run: python -m playwright install --with-deps chromium
+      - name: pyflakes
+        run: python -m pyflakes dashboard/server dashboard/tests
+      - name: integration tests (real engine, real browser, labelled mock providers)
+        working-directory: dashboard/tests
+        run: python -m unittest -v test_intake test_templates test_batches test_execution test_ui
+      - name: upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dashboard-evidence
+          path: dashboard-evidence/
+          retention-days: 14
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: build the image
+        run: docker build -f dashboard/Dockerfile -t design-dna-dashboard:ci .
+      - name: smoke test (web + worker, auth required)
+        run: |
+          docker volume create dna-ci
+          docker run -d --name dna-web -p 127.0.0.1:8765:8765 -e DNA_AUTH_TOKEN=ci-token -v dna-ci:/data design-dna-dashboard:ci
+          docker run -d --name dna-worker -e DNA_AUTH_TOKEN=ci-token -v dna-ci:/data design-dna-dashboard:ci python -m dna_dashboard worker
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8765/api/health && break; sleep 2; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/api/templates)" = 401
+          curl -fsS -H "Authorization: Bearer ci-token" http://127.0.0.1:8765/api/runtime | python3 -m json.tool | head -40
+          docker exec dna-worker python -m dna_dashboard check | head -40
+      - name: logs
+        if: always()
+        run: docker logs dna-web; docker logs dna-worker

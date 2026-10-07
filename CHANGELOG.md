@@ -5,10 +5,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-Design DNA installs in every AI tool that can load it, starting with ChatGPT, from one skill and one engine; and
-the acceptance suite runs off Windows (the first open item of the audit response).
+Design DNA installs in every AI tool that can load it, starting with ChatGPT, from one skill and one engine; the
+acceptance suite runs off Windows (the first open item of the audit response); and a web dashboard turns the engine
+into a template library with batch generation.
 
 ### Added
+- **Dashboard** (`dashboard/`): a web app (React + TypeScript), API (FastAPI, SQLite) and separate durable worker
+  around the engine. Template library, a resumable creation workflow (inspiration → purpose → scan → rules → staged
+  rebuild and compare → save at the readiness actually reached), template inspector, protected originals with
+  copies, verified free-text/typed edits and versions, products, a batch composer with per-output copy and
+  precedence, deterministic adaptation, creative generation through a configured image provider, results review,
+  scoped retries without blind paid duplicates, ZIP/PNG/SVG/`.dnab` downloads, auth for non-local binds, and a
+  container setup. Claude (Anthropic API) proposes scan elements, drafts copy and compiles free-text edits; OpenAI
+  GPT Image generates images. Without keys, every other path works. See `dashboard/README.md` and
+  `docs/DASHBOARD-REPORT.md`.
+- A2 evidence (`docs/images/evidence/a2-2026-10-07/`): before the partial-raster fix below, 7 of 30 fresh-process
+  renders under full CPU load differed from an approved baseline by the same 3 px on the CTA pill's corner (0 of 30
+  idle); with the fix, 0 of 30 under the same load. The dashboard labels any such refusal **Baseline not reproduced**
+  and keeps both images.
+- Regressions T34–T37: a legacy pin without `text_rendering` is drift that needs a decision (A1); migration
+  confirmation is bound to the reviewed preview (A3); four fresh-process renders of an edited fixture are
+  identical (A2); hidden nodes in isolated-bounds checks.
 - Pixel differences are located, not just counted: a refused edit's `visual_changes.outside_where`, the SVG
   round-trip, the approved-baseline re-run check and `compare_render`'s exact-pixel check now list the first
   differing pixels with their before/after values (and, for edits, the element under each).
@@ -49,6 +66,15 @@ the acceptance suite runs off Windows (the first open item of the audit response
 - CI job `acceptance-linux` (ubuntu-latest, `requirements-lock.txt`, portable fonts, its own evidence artifact).
 
 ### Changed
+- **Migration confirmation is bound to the reviewed preview.** `migrate-baseline "<T>"` writes an immutable
+  `migration-preview.json` with a `preview_id` and the hashes it was made from (base revision and model, old pin,
+  approved baseline, candidate PNG, new renderer fingerprint). `migrate-baseline "<T>" confirm preview=<id>` adopts
+  exactly that candidate file and is refused when any of them changed (`stale_preview`, `changed_candidate`,
+  `unknown_preview`, `preview_already_confirmed`). A bare `confirm` is refused (`preview_required`).
+- **A legacy pin is not a silent match.** A pin recorded before `text_rendering` existed now reports that field as
+  hard drift (`pinned: "unrecorded (pin predates this field)"`, `legacy_pin: true`), so preservation stops until a
+  migration is reviewed and confirmed.
+- A typed `replace` op can record `"source": "generated"` for a synthesized image (default `supplied`).
 - `SKILL.md` declares `license` and `compatibility` (Agent Skills fields) and points at the repository for the
   acceptance suite, which installed copies leave out.
 - `docs/CHATGPT-WORK.md` (an untested adaptation note) is replaced by `docs/hosts/chatgpt.md`.
@@ -57,6 +83,8 @@ the acceptance suite runs off Windows (the first open item of the audit response
   it by up to 1 px towards the substitute's glyph shapes.
 - T21 uses any second installed browser channel (Edge, Chrome or Playwright's Chromium) for the real drift check,
   not only Edge; with none it stays unverified.
+- `render_static`: isolated-bounds checks no longer crash on a hidden node (found by the dashboard's clean-store
+  round trip; regression T37).
 - `annotate_scan.py` no longer crashes on text nodes whose baseline is not measured yet (found by the Claude Code
   end-to-end run).
 - Renderer: the same model now rasterises to the same pixels in every browser launch. With Chrome's partial raster,
@@ -64,8 +92,8 @@ the acceptance suite runs off Windows (the first open item of the audit response
   it could land a few levels differently: 2-5 pixels on the CTA pill's edge differed between launches on GitHub's
   Linux and Windows runners, so an approved baseline sometimes failed to reproduce and legitimate edits were refused
   (T10, T16, T20, T22, T26, T27, T32 at different times). The browser now runs with `--disable-partial-raster`, so
-  every re-raster covers whole tiles; it is recorded as `render_profile.determinism_args` (a hard drift field once a
-  pin records it; pins made before 2.1.0 are not declared drifted by it).
+  every re-raster covers whole tiles; it is recorded as `render_profile.determinism_args` (a hard drift field; a pin made
+  before 2.1.0 reports it as unrecorded, which needs a reviewed migration, see A1).
 - Renderer on Linux: text is now rasterised the same way everywhere. Chrome on Linux takes per-font hinting and
   subpixel settings from fontconfig, and stock distributions (Ubuntu, GitHub's runners) turn on slight hinting that
   `--font-render-hinting=none` does not override on every text path, so text in a full render and in a fitting page

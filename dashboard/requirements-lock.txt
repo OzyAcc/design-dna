@@ -1,0 +1,17 @@
+# Exact versions the dashboard test suite passed with (Linux, Python 3.13, Chromium 141 via Playwright 1.56).
+# Install: python -m pip install -r dashboard/requirements-lock.txt
+anthropic==1.11.0
+anyio==4.15.1
+fastapi==0.142.2
+fonttools==4.66.1
+jsonschema==4.26.0
+numpy==2.5.3
+openai==3.26.0
+pillow==12.3.0
+playwright==1.56.0
+pydantic==2.13.5
+python-multipart==0.0.32
+scikit-image==0.26.0
+scipy==1.18.1
+starlette==1.6.0
+uvicorn==0.53.0

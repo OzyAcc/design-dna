@@ -1,0 +1,59 @@
+{
+ "what": "audit A2 occurrence: a fresh-process re-render of an approved baseline differed from it",
+ "where": "dashboard output job (screenshot workspace), template 'Botanical Editorial' v1, Linux, Chromium 141.0.7390.37 (Playwright 1.56), software raster flags of the pinned profile",
+ "approved_baseline_sha256": "e68a01b5efc344a0dad0871e810fa076070cec6c1a7a04534f4b357fe6e1e22b",
+ "re_render_sha256": "89f3ab156db64d5fe9464ed8c6b582fad7a5be55a3fc44113625a5c890ba81f9",
+ "differing_pixels": [
+  {
+   "x": 62,
+   "y": 905,
+   "approved": [
+    238,
+    234,
+    226,
+    255
+   ],
+   "re_render": [
+    227,
+    224,
+    216,
+    255
+   ]
+  },
+  {
+   "x": 63,
+   "y": 905,
+   "approved": [
+    51,
+    48,
+    44,
+    255
+   ],
+   "re_render": [
+    30,
+    27,
+    23,
+    255
+   ]
+  },
+  {
+   "x": 63,
+   "y": 906,
+   "approved": [
+    161,
+    158,
+    151,
+    255
+   ],
+   "re_render": [
+    126,
+    123,
+    117,
+    255
+   ]
+  }
+ ],
+ "max_channel_error": 35,
+ "engine_outcome": "transaction refused (approved baseline not reproduced); nothing committed; output Needs review",
+ "conditions": "three render-heavy processes in parallel (the dashboard suite, the engine acceptance suite and the screenshot script)"
+}

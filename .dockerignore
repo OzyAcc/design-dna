@@ -1,0 +1,14 @@
+.git
+**/__pycache__
+**/*.pyc
+**/node_modules
+dashboard/web/dist
+dashboard/.env
+acceptance-out
+design-dna-store
+dist
+docs/*
+!docs/images
+docs/images/evidence
+*.log
+docs/images/dashboard

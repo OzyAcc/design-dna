@@ -400,11 +400,14 @@ def _isolated_bounds(page, scene, W, H, mask_dir=None) -> dict:
     if mask_dir:
         Path(mask_dir).mkdir(parents=True, exist_ok=True)
     for n in scene["nodes"]:
+        lay = page.evaluate("(id) => { const e = document.querySelector(`[data-dna=\"${id}\"]`); if (!e) return null;"
+                            " const r = e.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; }", n["id"])
+        if lay is None:  # a hidden node (or the child of a hidden group) is not in the drawing: no footprint, no mask
+            out[n["id"]] = {"layout": None, "rendered": None, "hidden": True}
+            continue
         page.evaluate("""(id) => { let s = document.getElementById('dna-iso'); if (!s) { s = document.createElement('style');
             s.id = 'dna-iso'; document.head.appendChild(s); }
             s.textContent = `[data-dna]{visibility:hidden} [data-dna="${id}"], [data-dna="${id}"] *{visibility:visible}`; }""", n["id"])
-        lay = page.evaluate("(id) => { const r = document.querySelector(`[data-dna=\"${id}\"]`).getBoundingClientRect();"
-                            " return [r.x, r.y, r.width, r.height]; }", n["id"])
         png = capture(page, clip={"x": 0, "y": 0, "width": W, "height": H}, omit_background=True, animations="disabled")
         alpha = np.asarray(Image.open(io.BytesIO(png)).convert("RGBA"))[:, :, 3]
         ys, xs = np.nonzero(alpha)
@@ -415,6 +418,14 @@ def _isolated_bounds(page, scene, W, H, mask_dir=None) -> dict:
             out[n["id"]]["mask"] = str(Path(mask_dir) / f"{n['id']}.png")
     page.evaluate("() => { const s = document.getElementById('dna-iso'); if (s) s.remove(); }")
     return out
+
+
+def current_environment(scene, tdir, channel=None) -> dict:
+    """The environment a render of `scene` would use now (browser launched for its version; nothing is rendered)."""
+    _, fonts = compile_svg(scene, tdir)
+    font_recs = [{"asset": a, "sha256": scene["assets"][a]["sha256"], "names": scene["assets"][a].get("font_names")} for a in fonts]
+    with browser(channel) as (b, ch):
+        return environment(ch, b.version, int(scene["canvas"]["width"]), int(scene["canvas"]["height"]), scene["canvas"]["alpha"], font_recs)
 
 
 def render(scene, tdir, out_dir, isolate=False, formats=("png",), name="render", svg_fonts="embed",

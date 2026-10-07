@@ -234,7 +234,8 @@ def op_replace(scene, op, tdir):
     n = find_node(scene, op["node"])
     if n["type"] not in ("image", "background"):
         raise DnaError(f"{n['id']} is a {n['type']} node; replace targets image assets", "bad_target")
-    rec = adopt_asset(scene, import_asset(tdir, op["file"], "image", "supplied", baked_effects=op.get("baked_effects", [])))
+    # a synthesized image keeps its provenance (`generated`); it is never recorded as a supplied or recovered original
+    rec = adopt_asset(scene, import_asset(tdir, op["file"], "image", op.get("source", "supplied"), baked_effects=op.get("baked_effects", [])))
     before = n.get("asset")
     n["asset"] = rec["id"]
     out = [change(f"nodes.{n['id']}.asset", before, rec["id"])]

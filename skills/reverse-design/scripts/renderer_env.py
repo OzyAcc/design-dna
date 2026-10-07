@@ -28,8 +28,8 @@ COLOR_POLICY = "sRGB forced; image assets untagged -> treated as sRGB"
 # measurement touching text) is re-rasterised under a smaller clip, and anti-aliased edges inside it can land a few
 # levels differently: seen on CI runners as 2-5 pixels of a rounded rectangle's edge differing between launches of the
 # same model. Every re-raster now covers whole tiles. (--run-all-compositor-stages-before-draw was tried too and is
-# left out: it made a headless screenshot wait past its timeout.) Recorded apart from browser_args so that pins made
-# before 2.1.0 are not declared drifted by it.
+# left out: it made a headless screenshot wait past its timeout.) Recorded apart from browser_args, so a pin made before
+# 2.1.0 reports it as an unrecorded field (SINCE_2_1: a reviewed migration records it), not as a changed argument list.
 DETERMINISM_ARGS = ["--disable-partial-raster"]
 # Chrome on Linux takes per-font hinting and subpixel settings from fontconfig, and stock distributions turn on slight
 # hinting: --font-render-hinting=none does not reach every text path, so the same text rasterised differently in a
@@ -41,7 +41,10 @@ TEXT_RENDERING = ("fontconfig enforced: antialias, no hinting, no subpixel order
 # the viewport, an adaptation may add a font asset), so they are not drift; a pinned font still in use must keep its hash.
 HARD = ("channel", "browser_version", "device_scale_factor", "browser_args", "color_policy", "font_synthesis", "text_rendering",
         "determinism_args")
-SINCE_2_1 = ("text_rendering", "determinism_args")  # pins made before 2.1.0 do not record them: compared once a pin does
+# Pins made before 2.1.0 do not record these hard fields. An unrecorded policy is not evidence that the policy matched:
+# it is reported as a hard difference, so preservation stays unclaimed until a reviewed migration records it.
+SINCE_2_1 = ("text_rendering", "determinism_args")
+UNRECORDED = "unrecorded (pin predates this field)"
 SOFT = ("playwright", "python", "os", "packages")
 RECORDED = ("viewport", "alpha", "fonts", "animations", "randomness", "renderer")
 PACKAGES = ("pillow", "numpy", "scikit-image", "scipy", "fonttools", "jsonschema", "playwright")
@@ -137,6 +140,13 @@ def environment(channel, browser_version, W, H, alpha, fonts) -> dict:
             "packages": {k: _pkg(k) for k in PACKAGES}}
 
 
+def fingerprint(profile) -> dict:
+    """The hard renderer fields plus the font files a render used: what must be equal for two renders to be comparable."""
+    fp = {k: profile.get(k) for k in HARD}
+    fp["fonts"] = sorted(f["sha256"] for f in profile.get("fonts", []))
+    return fp
+
+
 def make_pin(profile, reason="baseline approved") -> dict:
     pin = {k: profile[k] for k in HARD + SOFT + RECORDED if k in profile}
     pin.update(pinned_at=now(), reason=reason)
@@ -148,6 +158,9 @@ def compare_pin(pin, env) -> dict:
     def diffs(keys):
         return [{"field": k, "pinned": pin.get(k), "current": env.get(k)} for k in keys if pin.get(k) != env.get(k)]
     hard = diffs([k for k in HARD if k in pin or k not in SINCE_2_1])
+    hard += [{"field": k, "pinned": UNRECORDED, "current": env.get(k), "legacy_pin": True,
+              "decision": "the pinned baseline's policy is unknown: preview a migration and confirm it before claiming preservation"}
+             for k in SINCE_2_1 if k not in pin]
     now_fonts = {f["asset"]: f["sha256"] for f in env.get("fonts", [])}
     for f in pin.get("fonts", []):
         if f["asset"] in now_fonts and now_fonts[f["asset"]] != f["sha256"]:
@@ -170,4 +183,5 @@ def drift_error(pin, diff, where="render") -> DnaError:
     return DnaError(f"renderer environment differs from the pinned baseline environment ({where}); "
                     "reproducibility cannot be claimed until the baseline is explicitly migrated",
                     "renderer_drift", {"hard": diff["hard"], "soft": diff["soft"], "pinned_at": pin.get("pinned_at"),
-                                       "fix": "dna.py 'migrate-baseline \"<template>\"' to preview the change, then add confirm"})
+                                       "fix": "dna.py 'migrate-baseline \"<template>\"' to preview the change, review it, then "
+                                              "'migrate-baseline \"<template>\" confirm preview=<preview id>'"})

@@ -1,0 +1,461 @@
+{
+ "idle": [
+  {
+   "run": 0,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.9,
+   "where": null
+  },
+  {
+   "run": 1,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.6,
+   "where": null
+  },
+  {
+   "run": 2,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 2.1,
+   "where": null
+  },
+  {
+   "run": 3,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.7,
+   "where": null
+  },
+  {
+   "run": 4,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.6,
+   "where": null
+  },
+  {
+   "run": 5,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.5,
+   "where": null
+  },
+  {
+   "run": 6,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.7,
+   "where": null
+  },
+  {
+   "run": 7,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.5,
+   "where": null
+  },
+  {
+   "run": 8,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.6,
+   "where": null
+  },
+  {
+   "run": 9,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.7,
+   "where": null
+  },
+  {
+   "run": 10,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.9,
+   "where": null
+  },
+  {
+   "run": 11,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.7,
+   "where": null
+  },
+  {
+   "run": 12,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.5,
+   "where": null
+  },
+  {
+   "run": 13,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.5,
+   "where": null
+  },
+  {
+   "run": 14,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.6,
+   "where": null
+  },
+  {
+   "run": 15,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.5,
+   "where": null
+  },
+  {
+   "run": 16,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.6,
+   "where": null
+  },
+  {
+   "run": 17,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.6,
+   "where": null
+  },
+  {
+   "run": 18,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.8,
+   "where": null
+  },
+  {
+   "run": 19,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.7,
+   "where": null
+  },
+  {
+   "run": 20,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.8,
+   "where": null
+  },
+  {
+   "run": 21,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.6,
+   "where": null
+  },
+  {
+   "run": 22,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.6,
+   "where": null
+  },
+  {
+   "run": 23,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.6,
+   "where": null
+  },
+  {
+   "run": 24,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.6,
+   "where": null
+  },
+  {
+   "run": 25,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.5,
+   "where": null
+  },
+  {
+   "run": 26,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.6,
+   "where": null
+  },
+  {
+   "run": 27,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.5,
+   "where": null
+  },
+  {
+   "run": 28,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.6,
+   "where": null
+  },
+  {
+   "run": 29,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 1.6,
+   "where": null
+  }
+ ],
+ "loaded": [
+  {
+   "run": 0,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 3.7,
+   "where": null
+  },
+  {
+   "run": 1,
+   "unequal_px": 3,
+   "max_err": 35,
+   "seconds": 3.2,
+   "where": [
+    62,
+    905,
+    63,
+    906
+   ]
+  },
+  {
+   "run": 2,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 5.1,
+   "where": null
+  },
+  {
+   "run": 3,
+   "unequal_px": 3,
+   "max_err": 35,
+   "seconds": 5.7,
+   "where": [
+    62,
+    905,
+    63,
+    906
+   ]
+  },
+  {
+   "run": 4,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 5.1,
+   "where": null
+  },
+  {
+   "run": 5,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 4.3,
+   "where": null
+  },
+  {
+   "run": 6,
+   "unequal_px": 3,
+   "max_err": 35,
+   "seconds": 6.4,
+   "where": [
+    62,
+    905,
+    63,
+    906
+   ]
+  },
+  {
+   "run": 7,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 4.3,
+   "where": null
+  },
+  {
+   "run": 8,
+   "unequal_px": 3,
+   "max_err": 35,
+   "seconds": 5.7,
+   "where": [
+    62,
+    905,
+    63,
+    906
+   ]
+  },
+  {
+   "run": 9,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 4.6,
+   "where": null
+  },
+  {
+   "run": 10,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 6.4,
+   "where": null
+  },
+  {
+   "run": 11,
+   "unequal_px": 3,
+   "max_err": 35,
+   "seconds": 5.0,
+   "where": [
+    62,
+    905,
+    63,
+    906
+   ]
+  },
+  {
+   "run": 12,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 5.0,
+   "where": null
+  },
+  {
+   "run": 13,
+   "unequal_px": 3,
+   "max_err": 35,
+   "seconds": 5.1,
+   "where": [
+    62,
+    905,
+    63,
+    906
+   ]
+  },
+  {
+   "run": 14,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 4.7,
+   "where": null
+  },
+  {
+   "run": 15,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 3.4,
+   "where": null
+  },
+  {
+   "run": 16,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 4.4,
+   "where": null
+  },
+  {
+   "run": 17,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 3.3,
+   "where": null
+  },
+  {
+   "run": 18,
+   "unequal_px": 3,
+   "max_err": 35,
+   "seconds": 4.0,
+   "where": [
+    62,
+    905,
+    63,
+    906
+   ]
+  },
+  {
+   "run": 19,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 3.4,
+   "where": null
+  },
+  {
+   "run": 20,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 4.0,
+   "where": null
+  },
+  {
+   "run": 21,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 3.6,
+   "where": null
+  },
+  {
+   "run": 22,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 4.2,
+   "where": null
+  },
+  {
+   "run": 23,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 3.0,
+   "where": null
+  },
+  {
+   "run": 24,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 4.2,
+   "where": null
+  },
+  {
+   "run": 25,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 3.3,
+   "where": null
+  },
+  {
+   "run": 26,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 4.9,
+   "where": null
+  },
+  {
+   "run": 27,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 3.9,
+   "where": null
+  },
+  {
+   "run": 28,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 5.2,
+   "where": null
+  },
+  {
+   "run": 29,
+   "unequal_px": 0,
+   "max_err": 0,
+   "seconds": 3.2,
+   "where": null
+  }
+ ]
+}

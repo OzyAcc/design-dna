@@ -47,6 +47,21 @@ The audit compared v1.0.0 with another engine and listed areas where that engine
 | Exported SVG verification | the exported file is rendered on its own and compared with the engine PNG; its manifest declares live text / vector / raster / filter effects |
 | Persistence | integrity-checked portable bundles; host persistence (ChatGPT Work) is an **unverified** integration point (T23, `docs/CHATGPT-WORK.md`) |
 
+## Dashboard build audit (A1–A5)
+
+The dashboard build spec listed five items against 2.0.0. Their closure, evidence and the part of A2 that could not
+be reproduced here are in [DASHBOARD-REPORT.md](DASHBOARD-REPORT.md#audit-closure-a1a5). In short:
+
+- **A1, legacy pins:** a pin missing a hard field is now drift (T34).
+- **A3, migration integrity:** confirmation is bound to the reviewed preview (T35).
+- **A2, fresh-process reproducibility:** new coverage (T36; T10 now renders 8 fresh launches). The difference was
+  reproduced on Linux under heavy CPU load (3 px at a curved edge, 7 of 30 renders) and is fixed by
+  `--disable-partial-raster` (0 of 30 under the same load). Any remaining refusal surfaces as **Baseline not
+  reproduced** in the dashboard.
+- **A4, orchestration:** Claude proposals pass through review and the engine's measurement tools.
+- **A5, generation:** an OpenAI image adapter, with generated results labelled and kept apart from the
+  deterministic checks.
+
 ## Still open
 
 - ~~A Linux/macOS fixture suite using redistributable fonts.~~ Done after 2.0.0 (unreleased): a portable font set
