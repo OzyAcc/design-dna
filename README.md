@@ -115,11 +115,30 @@ Full list: [CHANGELOG.md](CHANGELOG.md).
 measured templates, copy and edit them with verified changes, and generate product outputs in batches, each with its
 own copy. It has a durable worker, optional Claude and OpenAI image providers, and container setup.
 
+Run these from the repository folder (requirements: Python 3.12+, Node 22+):
+
 ```bash
+git clone https://github.com/OzyAcc/design-dna && cd design-dna
 python -m pip install -r dashboard/requirements.txt && python -m playwright install chromium
 (cd dashboard/web && npm ci && npm run build)
 cd dashboard/server && python -m dna_dashboard all     # http://127.0.0.1:8765
 ```
+
+**Windows** (Command Prompt or PowerShell, one line at a time):
+
+```bat
+git clone https://github.com/OzyAcc/design-dna
+cd design-dna
+python -m pip install -r dashboard\requirements.txt
+python -m playwright install chromium
+cd dashboard\web
+npm ci
+npm run build
+cd ..\server
+python -m dna_dashboard all
+```
+
+Then open http://127.0.0.1:8765. More Windows notes: [dashboard/README.md](dashboard/README.md#windows).
 
 Setup and the user guide: [dashboard/README.md](dashboard/README.md). What works, with evidence:
 [docs/DASHBOARD-REPORT.md](docs/DASHBOARD-REPORT.md).
