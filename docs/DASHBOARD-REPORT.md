@@ -140,12 +140,12 @@ staging copies and per-job stores are separate folders, and an engine step dies 
 
 | Check | Command | Result |
 |---|---|---|
-| Dashboard integration suite (real engine, real Chromium, real worker process; test-only mock providers) | `python -m unittest -v test_intake test_templates test_batches test_execution test_ui` | 51 tests, OK, none skipped (after the D1–D4 fixes; 38 before them) |
-| Engine acceptance (portable fonts, Linux) | `DESIGN_DNA_FONTSET=portable python skills/reverse-design/tests/run_acceptance.py` | 35 passed, 2 unverified (T21 needs a second browser channel; T23 host storage by design); includes T34–T37 and main's 8-launch T10; same result after merging `main` |
+| Dashboard integration suite (real engine, real Chromium, real worker process; test-only mock providers) | `python -m unittest -v test_intake test_templates test_batches test_execution test_ui` | 64 tests, OK, none skipped, on the final code (38 before the D1–D4 fixes) |
+| Engine acceptance (portable fonts, Linux) | `DESIGN_DNA_FONTSET=portable python skills/reverse-design/tests/run_acceptance.py` | 35 passed, 2 unverified (T21 needs a second browser channel; T23 host storage by design); includes T34–T37 and main's 8-launch T10; same result after merging `main` and again with the D1–D4 fixes (the engine itself did not change) |
 | Installer and package tests | `python -m unittest discover -s hosts/tests` | 16 tests, OK |
 | Generated docs are current | `python install.py docs --check` | up to date |
 | Static checks | `python -m pyflakes skills/reverse-design/scripts skills/reverse-design/tests hosts install.py dashboard/server dashboard/tests`; `npm run build` (tsc + vite) | clean |
-| Container | `docker build -f dashboard/Dockerfile .`, web + worker containers, full flow inside | image built; health 200, unauthenticated 401; template measured → rebuilt (`partial_baseline`, reproduces) → v1 → output `completed`, verification `pass`, SVG round trip `pass` → ZIP |
+| Container | `docker build -f dashboard/Dockerfile .`, web + worker containers, full flow inside | image built from the final code; health 200, unauthenticated 401, worker check; template measured → rebuilt (`partial_baseline`, reproduces) → v1 → output `completed`, verification `pass`, SVG round trip `pass` → ZIP; submission lookup and repeat return the same run. With the labelled mock provider (no keys, no billable request): creative overlay `completed`, verification `pass`, SVG round trip `pass`, the headline live in the SVG, one stored request; overflowing copy refused before the request (0 requests) |
 
 **Not run:**
 
@@ -155,6 +155,11 @@ staging copies and per-job stores are separate folders, and an engine step dies 
 - Engine T21 needs a second browser channel; T23 (host storage) is unverified by design.
 - A screen-reader pass.
 - A browser clipboard paste.
+- For D1–D4: a real image model (whether it keeps the text areas calm and spells drawn text correctly); a power cut
+  during a checkpoint write (only process kills were tested); two browsers, rather than two tabs, editing or
+  submitting the same batch; the D3 and D4 failures were confirmed against the merged code by reading it, not by
+  running it (the crash points did not exist there).
+- No customer keys were used and no billable requests were made.
 
 The container build here needed one environment workaround. This sandbox's network blocks the Debian package
 mirror, so the image uses Playwright's official base image, which already contains the browser libraries. The
