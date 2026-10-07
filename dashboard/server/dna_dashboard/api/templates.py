@@ -152,6 +152,10 @@ def measure(tid: str, conn=Depends(get_conn)):
     els = [e for e in (t["draft"] or {}).get("elements", []) if e.get("status") != "rejected"]
     if not els:
         raise AppError("accept or draw at least one element before measuring", "no_elements")
+    pending = [e.get("key") for e in els if e.get("status") == "proposed"]
+    if pending:
+        raise conflict("review every proposal first: accept or reject it (a proposal is not a finding)", "unreviewed_proposals",
+                       elements=pending[:20])
     ts.ensure_idle(conn, tid)
     return _job(conn, "template.measure", t, {})
 

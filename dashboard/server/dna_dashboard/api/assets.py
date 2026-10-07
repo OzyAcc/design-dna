@@ -40,9 +40,9 @@ async def upload(files: list[UploadFile] = File(...), role: str = Form(...), sou
             data = await _read_limited(f)
             out.append(intake.ingest(data, role=role, original_name=f.filename, source_kind=source_kind, conn=conn))
         except AppError as e:
-            errors.append({"file": intake.safe_name(f.filename), "code": e.code, "message": e.message})
+            errors.append({"file": intake.safe_name(f.filename), "code": e.code, "message": e.message, "status": e.status})
     if not out and errors:
-        raise AppError(errors[0]["message"], errors[0]["code"], 415 if errors[0]["code"] == "unsupported_format" else 400, {"errors": errors})
+        raise AppError(errors[0]["message"], errors[0]["code"], errors[0]["status"], {"errors": errors})
     return {"assets": out, "errors": errors}
 
 

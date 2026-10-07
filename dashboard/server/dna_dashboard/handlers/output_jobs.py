@@ -215,8 +215,15 @@ def _refused(ctx, o, odir, e: EngineError, prov_meta):
         if art and Path(art).exists():
             shutil.copyfile(art, ev / "visual_diff.png")
             files.append(_file(ev / "visual_diff.png", "evidence", "refused/visual_diff.png"))
-    kind = "infrastructure" if any((c.get("code") if isinstance(c, dict) else None) in ("renderer_unavailable", "renderer_drift") for c in conflicts) else "conflict"
-    err = {"kind": kind, "message": "the engine refused this output; nothing was committed", "conflicts": json.loads(json.dumps(conflicts, default=str))[:20]}
+    codes = {c.get("code") for c in conflicts if isinstance(c, dict)}
+    if "renderer_drift" in codes:
+        kind, msg = "renderer_drift", ("the renderer differs from this template's pinned baseline, so preservation cannot be checked; "
+                                       "preview and confirm a renderer migration on the template page, then retry")
+    elif "renderer_unavailable" in codes:
+        kind, msg = "infrastructure", "no Chromium-based browser could be launched; nothing was committed"
+    else:
+        kind, msg = "conflict", "the engine refused this output; nothing was committed"
+    err = {"kind": kind, "message": msg, "conflicts": json.loads(json.dumps(conflicts, default=str))[:20]}
     checks = summarize_checks(txn, None) if v else {"path": "adapt", "verification_status": "not_run"}
     _set_output(ctx.conn, o["id"], status="needs_review", files=files, checks=checks, error=err,
                 provenance={"path": o["mode"], "generated": prov_meta}, limitations=["refused by the engine: see conflicts"])

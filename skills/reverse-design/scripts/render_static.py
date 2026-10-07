@@ -400,11 +400,14 @@ def _isolated_bounds(page, scene, W, H, mask_dir=None) -> dict:
     if mask_dir:
         Path(mask_dir).mkdir(parents=True, exist_ok=True)
     for n in scene["nodes"]:
+        lay = page.evaluate("(id) => { const e = document.querySelector(`[data-dna=\"${id}\"]`); if (!e) return null;"
+                            " const r = e.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; }", n["id"])
+        if lay is None:  # a hidden node (or the child of a hidden group) is not in the drawing: no footprint, no mask
+            out[n["id"]] = {"layout": None, "rendered": None, "hidden": True}
+            continue
         page.evaluate("""(id) => { let s = document.getElementById('dna-iso'); if (!s) { s = document.createElement('style');
             s.id = 'dna-iso'; document.head.appendChild(s); }
             s.textContent = `[data-dna]{visibility:hidden} [data-dna="${id}"], [data-dna="${id}"] *{visibility:visible}`; }""", n["id"])
-        lay = page.evaluate("(id) => { const r = document.querySelector(`[data-dna=\"${id}\"]`).getBoundingClientRect();"
-                            " return [r.x, r.y, r.width, r.height]; }", n["id"])
         png = capture(page, clip={"x": 0, "y": 0, "width": W, "height": H}, omit_background=True, animations="disabled")
         alpha = np.asarray(Image.open(io.BytesIO(png)).convert("RGBA"))[:, :, 3]
         ys, xs = np.nonzero(alpha)

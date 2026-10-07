@@ -416,9 +416,27 @@ def r36(root, fx, record, expect_error):
         for it in res["edit"]}, [o / "results.json"], notes="any difference is retained as evidence and is never relabelled as identity")
 
 
+def r37(root, fx, record, expect_error):
+    """Hiding an element (an optional slot left empty) renders, isolates and verifies; it used to crash per-node isolation."""
+    o = folder(root, 37, "hide-element")
+    dna.run(f'use "{TID}" for task "Hide the label"')
+    tid, vid = dna.current()
+    r = dna.run("set label.visible = false keep everything else")
+    txn = read_json(template_dir(tid) / "variants" / vid / "transactions" / f"txn-{r['revision']:04d}.json")
+    v = txn["verification"]
+    vis = (v.get("vs_approved_baseline") or v)["visual_changes"]
+    write_json(o / "transaction.json", txn)
+    record(37, "Hiding an element renders, isolates and verifies (no crash on a node without a footprint)", {
+        "committed": r["status"] == "committed",
+        "only label.visible changed in the model": v["model_changes"]["actual_changed_paths"] == ["nodes.n-label.visible"] or v["model_changes"],
+        "the label's pixels changed (requested edit probed)": all(x["status"] == "pass" for x in v["requested_edits"]) or v["requested_edits"],
+        "0 px changed outside the label's own footprint": vis["outside_influence"] == 0 or vis,
+    }, [o / "transaction.json"])
+
+
 def run(root, fx, record, want, expect_error):
     for n, fn in ((24, r24), (25, r25), (26, r26), (27, r27), (28, r28), (29, r29), (30, r30), (31, r31), (32, r32), (33, r33),
-                  (34, r34), (35, r35), (36, r36)):
+                  (34, r34), (35, r35), (36, r36), (37, r37)):
         if not want(n):
             continue
         try:
