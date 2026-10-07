@@ -99,7 +99,7 @@ staging copies and per-job stores are separate folders, and an engine step dies 
 
 | Check | Command | Result |
 |---|---|---|
-| Dashboard integration suite (real engine, real Chromium, real worker process; test-only mock providers) | `python -m unittest -v test_intake test_templates test_batches test_execution test_ui` | 38 tests, OK (also re-run after merging `main`: 38 OK) |
+| Dashboard integration suite (real engine, real Chromium, real worker process; test-only mock providers) | `python -m unittest -v test_intake test_templates test_batches test_execution test_ui` | 39 tests, OK (38 before the creative-slot pin check was added; also re-run after merging `main`: 38 OK) |
 | Engine acceptance (portable fonts, Linux) | `DESIGN_DNA_FONTSET=portable python skills/reverse-design/tests/run_acceptance.py` | 35 passed, 2 unverified (T21 needs a second browser channel; T23 host storage by design); includes T34–T37 and main's 8-launch T10; same result after merging `main` |
 | Installer and package tests | `python -m unittest discover -s hosts/tests` | 16 tests, OK |
 | Generated docs are current | `python install.py docs --check` | up to date |
