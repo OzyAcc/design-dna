@@ -33,6 +33,45 @@ python -m dna_dashboard all                    # API + web app on http://127.0.0
 
 Open **http://127.0.0.1:8765**. Data goes to `~/design-dna-dashboard` (override it with `DNA_DATA_DIR`).
 
+### Windows
+
+The commands above are for bash. In Command Prompt `#` does not start a comment (it is passed to Python as an
+argument), and Windows PowerShell 5 does not support `&&`. Run these from the folder that contains the repository,
+one line at a time. They work in both Command Prompt and PowerShell:
+
+```bat
+git clone https://github.com/OzyAcc/design-dna
+cd design-dna
+python -m pip install -r dashboard\requirements.txt
+python -m playwright install chromium
+cd dashboard\web
+npm ci
+npm run build
+cd ..\server
+python -m dna_dashboard all
+```
+
+Open **http://127.0.0.1:8765** and keep the window open: closing it stops the dashboard. Data goes to
+`%USERPROFILE%\design-dna-dashboard`.
+
+- Check the versions first: `python --version` (3.12+) and `node --version` (22+). If `node` is not recognized,
+  install Node.js LTS from nodejs.org and open a new window.
+- Without Git, download the ZIP from GitHub (**Code** → **Download ZIP**), extract it, `cd` into the extracted
+  folder and skip the `git clone` line.
+- With Chrome or Edge installed, `python -m playwright install chromium` is optional.
+- `The system cannot find the path specified` or `Could not open requirements file` means the window is not in the
+  repository folder. `cd` into `design-dna` first.
+
+Later runs need no install or build. From the repository folder:
+
+```bat
+cd dashboard\server
+python -m dna_dashboard all
+```
+
+To set a variable such as `DNA_DATA_DIR` for one session: `set DNA_DATA_DIR=D:\dna-data` in Command Prompt, or
+`$env:DNA_DATA_DIR = "D:\dna-data"` in PowerShell.
+
 For production-like use, run the processes separately. You can run more than one worker:
 
 ```bash
