@@ -73,6 +73,22 @@ jobs:
         run: python skills/reverse-design/scripts/capabilities.py
       - name: acceptance suite (portable fonts)
         run: python skills/reverse-design/tests/run_acceptance.py
+      - name: failure crops in the log (base64 PNG, for readers without the artifact)
+        if: failure()
+        run: |
+          nproc; grep -m1 "model name" /proc/cpuinfo || true; fc-match sans-serif; fc-match "Liberation Sans:bold"
+          python - <<'EOF'
+          import base64, glob, io
+          from PIL import Image
+          boxes = {"cta": (140, 1170, 380, 1226), "label": (70, 135, 430, 185)}
+          for name in ("reference/reference.png", "t01-synthetic-measured/render/render.png"):
+              for p in glob.glob(f"acceptance-out/*/{name}"):
+                  im = Image.open(p).convert("RGB")
+                  for k, b in boxes.items():
+                      buf = io.BytesIO()
+                      im.crop(b).save(buf, "PNG", optimize=True)
+                      print("CROP", name, k, ",".join(map(str, b)), base64.b64encode(buf.getvalue()).decode())
+          EOF
       - name: upload evidence
         if: always()
         uses: actions/upload-artifact@v7
