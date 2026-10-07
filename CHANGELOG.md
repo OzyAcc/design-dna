@@ -19,10 +19,10 @@ into a template library with batch generation.
   container setup. Claude (Anthropic API) proposes scan elements, drafts copy and compiles free-text edits; OpenAI
   GPT Image generates images. Without keys, every other path works. See `dashboard/README.md` and
   `docs/DASHBOARD-REPORT.md`.
-- **Known issue (A2):** under heavy CPU load, Chromium 141 on Linux sometimes rasterises one antialiased curve
-  differently (3 px). The pinned re-render then fails to reproduce the approved baseline and the edit or output is
-  refused; the dashboard labels it **Baseline not reproduced** and keeps both images. Evidence and probes are in
-  `docs/images/evidence/a2-2026-10-07/`. The root cause is open.
+- A2 evidence (`docs/images/evidence/a2-2026-10-07/`): before the partial-raster fix below, 7 of 30 fresh-process
+  renders under full CPU load differed from an approved baseline by the same 3 px on the CTA pill's corner (0 of 30
+  idle); with the fix, 0 of 30 under the same load. The dashboard labels any such refusal **Baseline not reproduced**
+  and keeps both images.
 - Regressions T34–T37: a legacy pin without `text_rendering` is drift that needs a decision (A1); migration
   confirmation is bound to the reviewed preview (A3); four fresh-process renders of an edited fixture are
   identical (A2); hidden nodes in isolated-bounds checks.

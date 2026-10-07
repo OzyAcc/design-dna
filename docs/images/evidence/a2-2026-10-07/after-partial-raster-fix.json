@@ -1,0 +1,40 @@
+{
+ "what": "the same probe after merging main's renderer fix (--disable-partial-raster, recorded as render_profile.determinism_args)",
+ "method": "one idle reference render, 10 more idle renders and 30 renders under full CPU load (2 x nproc busy processes), each in a fresh process, compared with the reference (decoded RGBA, no tolerance); pin check bypassed because this tests rasterisation only",
+ "result": {
+  "idle_vs_idle_reference": "0/10 differ",
+  "loaded_vs_idle_reference": "0/30 differ",
+  "loaded_px": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ }
+}
