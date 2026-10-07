@@ -64,8 +64,8 @@ which refers to `skills/reverse-design/tests/run_acceptance.py`.
 | Results review, approval, single-file downloads, ZIP with `manifest.json` + `MANIFEST.txt` | Implemented and tested | T26 (hashes match, latest revision per output, no secrets or unrelated files), screenshot 09 | — |
 | Settings: providers, renderer, limits, fonts; keys stored 0600 and picked up by a running worker | Implemented and tested | T19, T26, screenshot 10 | — |
 | Responsive layout, keyboard use, accessible names | Implemented and tested | T28 (every page at 390 and 1280 px: no sideways scroll, no script errors, every visible control named; skip link, focus ring, phone menu) | a screen-reader pass |
-| Container: web + separate worker on one volume, auth required | Implemented and tested locally | image built (Playwright base), health/401/runtime checked, a full template → output → ZIP run inside it | the `container` CI job has not run on GitHub yet |
-| CI for the dashboard | Implemented, not yet run | `.github/workflows/dashboard.yml` | first GitHub Actions run |
+| Container: web + separate worker on one volume, auth required | Implemented and tested | image built (Playwright base), health/401/runtime checked, a full template → output → ZIP run inside it; the `container` CI job builds it and checks health, 401 and the worker on GitHub | — |
+| CI for the dashboard | Implemented and tested | `.github/workflows/dashboard.yml`: `test` (full suite, real browser) and `container` pass on GitHub's Ubuntu runners | — |
 | PDF/PSD/Figma/AI intake, live website capture, background removal, OCR, automatic segmentation | Unimplemented (the engine reports them `unsupported`) | Settings → Input adapters | adapters |
 | Multi-user accounts, roles, per-user history | Unimplemented (one workspace token) | — | an identity provider |
 
@@ -109,8 +109,8 @@ staging copies and per-job stores are separate folders, and an engine step dies 
 **Not run:**
 
 - Live Anthropic and OpenAI requests: no keys in this environment.
-- Windows and macOS.
-- GitHub Actions: the new `dashboard` workflow and the existing workflows on this branch.
+- The dashboard on Windows and macOS. On GitHub, the engine acceptance suite passed on Windows (Chrome) and Linux,
+  and the installer tests on Windows, macOS and Ubuntu.
 - Engine T21 needs a second browser channel; T23 (host storage) is unverified by design.
 - A screen-reader pass.
 - A browser clipboard paste.
