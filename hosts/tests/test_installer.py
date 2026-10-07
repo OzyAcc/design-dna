@@ -149,6 +149,22 @@ class SkillFolders(unittest.TestCase):
         self.assertEqual(len(cursor["visible_installs"]), 2)
         self.assertTrue(any("copies" in w for w in d["warnings"]))
 
+    def test_github_routes(self):
+        reg = hk.load_registry()
+        exe, cmds = hk.github_commands("gemini-cli", "main")
+        self.assertEqual(cmds[0][:4], ["gemini", "extensions", "install", f"https://github.com/{hk.GITHUB_REPO}"])
+        self.assertIn("--ref", cmds[0])
+        exe, cmds = hk.github_commands("copilot")
+        self.assertEqual(cmds, [["copilot", "plugin", "marketplace", "add", hk.GITHUB_REPO],
+                                ["copilot", "plugin", "install", "design-dna@design-dna"]])
+        with self.assertRaises(hk.HostError):
+            hk.github_commands("codex")
+        root = json.loads((ROOT / "gemini-extension.json").read_text(encoding="utf-8"))
+        self.assertEqual((root["name"], root["version"]), ("design-dna", hk.version()))
+        for rel in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"):
+            self.assertIn(hk.version(), (ROOT / rel).read_text(encoding="utf-8"), rel)
+        self.assertTrue(reg)
+
     def test_legacy_wrapper_default_is_claude_code(self):
         if os.name == "nt" or not shutil.which("bash"):
             self.skipTest("bash wrapper")
@@ -211,9 +227,12 @@ class Packages(unittest.TestCase):
         self.assertEqual(json.loads((plugin / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))["skills"], "./skills/")
         self.assertEqual(hk.validate_skill(plugin / "skills" / hk.skill_name()), [])
         agent = self.unzip(self.manifest["packages"]["agent-plugin"]["file"]) / "design-dna-agent-plugin"
-        manifest = json.loads((agent / "plugin.json").read_text(encoding="utf-8"))
+        market = json.loads((agent / ".github" / "plugin" / "marketplace.json").read_text(encoding="utf-8"))
+        self.assertEqual(market["plugins"][0]["source"], "./plugins/design-dna", "installed as plugin@marketplace")
+        manifest = json.loads((agent / "plugins" / "design-dna" / "plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["$schema"], "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json")
         self.assertFalse({"skills", "agents", "hooks"} & set(manifest), "Agent Plugins 1.0 has no component path fields")
+        self.assertEqual(hk.validate_skill(agent / "plugins" / "design-dna" / "skills" / hk.skill_name()), [])
         gem = self.unzip(self.manifest["packages"]["gemini-extension"]["file"]) / "design-dna-gemini-extension"
         self.assertEqual(json.loads((gem / "gemini-extension.json").read_text(encoding="utf-8"))["name"], "design-dna")
         self.assertEqual(hk.validate_skill(gem / "skills" / hk.skill_name()), [])

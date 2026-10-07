@@ -30,6 +30,7 @@ OVERLAYS = ROOT / "hosts" / "overlays"
 PRODUCT = "design-dna"
 STAMP = ".design-dna-install.json"
 ZIP_TIME = (2026, 1, 1, 0, 0, 0)
+GITHUB_REPO = os.environ.get("DESIGN_DNA_REPO", "OzyAcc/design-dna")  # --from github installs from here
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 
@@ -369,8 +370,8 @@ def build_skill_zip(pkg, out: Path, work: Path) -> Path:
 def build_tree(pkg, dest: Path) -> Path:
     """Build an unzipped plugin, extension or kit at dest. Returns the folder to hand to the host (or to zip)."""
     reg = load_registry()
-    h = host(reg, package_kinds()[pkg][2] if pkg in package_kinds() else {"copilot-marketplace": "copilot"}[pkg])
-    s = surface_for(h, "agent-plugin" if pkg == "copilot-marketplace" else pkg)
+    h = host(reg, package_kinds()[pkg][2])
+    s = surface_for(h, pkg)
     if pkg == "codex-plugin":
         plugin = dest / "plugins" / PRODUCT
         render_skill(h, s, plugin / "skills" / skill_name())
@@ -380,11 +381,11 @@ def build_tree(pkg, dest: Path) -> Path:
         (dest / ".agents" / "plugins" / "marketplace.json").write_text(fill(OVERLAYS / "packages" / "codex-marketplace.json"), encoding="utf-8")
         return dest
     if pkg == "agent-plugin":
-        render_skill(h, s, dest / "skills" / skill_name())
-        (dest / "plugin.json").write_text(fill(OVERLAYS / "packages" / "agent-plugin.json"), encoding="utf-8")
-        return dest
-    if pkg == "copilot-marketplace":  # the agent plugin inside a local marketplace (installer only)
-        build_tree("agent-plugin", dest / "plugins" / PRODUCT)
+        # An Agent Plugins 1.0 plugin (plugins/design-dna, portable) inside a local marketplace: Copilot keeps
+        # supporting plugin@marketplace installs only, so the download is installed through its marketplace.
+        plugin = dest / "plugins" / PRODUCT
+        render_skill(h, s, plugin / "skills" / skill_name())
+        (plugin / "plugin.json").write_text(fill(OVERLAYS / "packages" / "agent-plugin.json"), encoding="utf-8")
         (dest / ".github" / "plugin").mkdir(parents=True)
         (dest / ".github" / "plugin" / "marketplace.json").write_text(fill(OVERLAYS / "packages" / "copilot-marketplace.json"), encoding="utf-8")
         return dest
@@ -470,16 +471,36 @@ def run(cmd, dry_run, env=None, interactive=False) -> dict:
     return {"cmd": cmd, "code": r.returncode, "out": (r.stdout + r.stderr).strip()[-2000:]}
 
 
-def install_plugin(h, method, dry_run=False, assume_yes=False) -> dict:
-    """Codex plugin, Copilot plugin, Gemini extension or Claude Code plugin through the host's own CLI."""
+def github_commands(hid, ref=None) -> tuple[str, list[list[str]]]:
+    """Install straight from the GitHub repository with the host's own CLI (no local folder involved)."""
+    if hid == "claude-code":
+        return "claude", [["claude", "plugin", "marketplace", "add", GITHUB_REPO], ["claude", "plugin", "install", f"{PRODUCT}@{PRODUCT}"]]
+    if hid == "copilot":
+        src = GITHUB_REPO + (f"#{ref}" if ref else "")
+        return "copilot", [["copilot", "plugin", "marketplace", "add", src], ["copilot", "plugin", "install", f"{PRODUCT}@{PRODUCT}"]]
+    if hid == "gemini-cli":
+        cmd = ["gemini", "extensions", "install", f"https://github.com/{GITHUB_REPO}", "--consent"] + (["--ref", ref] if ref else [])
+        return "gemini", [cmd]
+    raise HostError(f"{hid}: no install route from GitHub (the Codex plugin needs a marketplace file the repository does not "
+                    "carry); use the local build: --from local")
+
+
+def install_plugin(h, method, dry_run=False, assume_yes=False, source="local", ref=None) -> dict:
+    """Codex plugin, Copilot plugin, Gemini extension or Claude Code plugin through the host's own CLI.
+
+    source="github" installs from the repository on GitHub (Copilot: its plugin@marketplace route; Gemini CLI: a git
+    source, which Gemini installs without its trust-this-folder question). source="local" builds from this checkout."""
     hid = h["id"]
+    if source == "github":
+        exe, cmds = github_commands(hid, ref)
+        return host_cli(h, exe, cmds, dry_run, [f"install from github.com/{GITHUB_REPO}" + (f" at {ref}" if ref else "")], assume_yes=assume_yes)
     if hid == "claude-code":
         cmds = [["claude", "plugin", "marketplace", "add", str(ROOT)], ["claude", "plugin", "install", f"{PRODUCT}@{PRODUCT}"]]
         return host_cli(h, "claude", cmds, dry_run, None, assume_yes=assume_yes)
-    pkg = {"codex": "codex-plugin", "copilot": "copilot-marketplace", "gemini-cli": "gemini-extension"}.get(hid)
+    pkg = {"codex": "codex-plugin", "copilot": "agent-plugin", "gemini-cli": "gemini-extension"}.get(hid)
     if not pkg:
         raise HostError(f"{hid} has no plugin or extension method; use the skill folder")
-    folder = store() / "hosts" / {"codex-plugin": "codex-marketplace", "copilot-marketplace": "copilot-marketplace",
+    folder = store() / "hosts" / {"codex-plugin": "codex-marketplace", "agent-plugin": "copilot-marketplace",
                                   "gemini-extension": "gemini-extension/design-dna"}[pkg]
     actions = [f"build {pkg} at {folder}"]
     if not dry_run:
@@ -494,15 +515,17 @@ def install_plugin(h, method, dry_run=False, assume_yes=False) -> dict:
         cmds = [["copilot", "plugin", "marketplace", "add", str(folder)], ["copilot", "plugin", "install", f"{PRODUCT}@{PRODUCT}-local"]]
         return host_cli(h, "copilot", cmds, dry_run, actions, assume_yes=assume_yes)
     # Gemini CLI asks whether to trust a local extension folder, separately from --consent. In a terminal the user
-    # answers it; unattended runs need --yes, which trusts only this command's run (GEMINI_CLI_TRUST_WORKSPACE).
+    # answers it; unattended runs need --yes (trusts only this command's run) or --from github (no question).
     return host_cli(h, "gemini", [["gemini", "extensions", "install", str(folder), "--consent"]], dry_run, actions,
-                    env={"GEMINI_CLI_TRUST_WORKSPACE": "true"} if assume_yes else None, prompts=not assume_yes, assume_yes=assume_yes)
+                    env={"GEMINI_CLI_TRUST_WORKSPACE": "true"} if assume_yes else None, prompts=not assume_yes, assume_yes=assume_yes,
+                    no_tty_hint="install from GitHub instead (--from github: Gemini asks nothing for git sources) or re-run with --yes")
 
 
-def uninstall_plugin(h, dry_run=False) -> dict:
+def uninstall_plugin(h, dry_run=False, source="local") -> dict:
+    market = PRODUCT if source == "github" else f"{PRODUCT}-local"
     cmds = {"claude-code": ("claude", [["claude", "plugin", "uninstall", f"{PRODUCT}@{PRODUCT}"]]),
             "codex": ("codex", [["codex", "plugin", "remove", f"{PRODUCT}@{PRODUCT}-local"], ["codex", "plugin", "marketplace", "remove", f"{PRODUCT}-local"]]),
-            "copilot": ("copilot", [["copilot", "plugin", "uninstall", PRODUCT], ["copilot", "plugin", "marketplace", "remove", f"{PRODUCT}-local"]]),
+            "copilot": ("copilot", [["copilot", "plugin", "uninstall", PRODUCT], ["copilot", "plugin", "marketplace", "remove", market]]),
             "gemini-cli": ("gemini", [["gemini", "extensions", "uninstall", PRODUCT]])}.get(h["id"])
     if not cmds:
         raise HostError(f"{h['id']} has no plugin or extension method")
@@ -515,7 +538,7 @@ def uninstall_plugin(h, dry_run=False) -> dict:
     return res
 
 
-def host_cli(h, exe, cmds, dry_run, actions, env=None, prompts=False, assume_yes=False) -> dict:
+def host_cli(h, exe, cmds, dry_run, actions, env=None, prompts=False, assume_yes=False, no_tty_hint=None) -> dict:
     """prompts: the host CLI asks a question this installer must not answer on the user's behalf without --yes."""
     res = {"host": h["id"], "method": "plugin", "actions": list(actions or []), "commands": [" ".join(c) for c in cmds]}
     if not which(exe):
@@ -525,7 +548,7 @@ def host_cli(h, exe, cmds, dry_run, actions, env=None, prompts=False, assume_yes
     interactive = sys.stdin.isatty() and not assume_yes
     if prompts and not interactive and not dry_run:
         res["status"] = "manual"
-        res["note"] = f"{exe} asks a confirmation question here: run the commands above in a terminal, or re-run with --yes"
+        res["note"] = f"{exe} asks a confirmation question here: run the commands above in a terminal, or " + (no_tty_hint or "re-run with --yes")
         return res
     res["results"] = []
     for c in cmds:

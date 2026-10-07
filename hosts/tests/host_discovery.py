@@ -11,6 +11,9 @@ Checks (each one installs with install.py, then reads the host's answer):
   opencode     skill folder: `opencode debug skill`
   claude-code  plugin route: `claude plugin validate` on the repository manifest (skill-folder discovery needs a
                signed-in session: see EVIDENCE.md)
+With --github-ref REF (a branch or tag pushed to the repository) it also installs from GitHub: the Gemini CLI
+extension as a git source (no trust-this-folder question, stdin closed) and the Copilot plugin through the
+repository's own marketplace (plugin@marketplace, no deprecation warning).
 """
 from __future__ import annotations
 
@@ -25,6 +28,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = "reverse-design"
+GITHUB_REF = None
 
 
 def sh(cmd, home: Path, cwd: Path, env=None, timeout=180) -> dict:
@@ -96,6 +100,15 @@ def gemini(tmp: Path) -> list[dict]:
     out.append(check("gemini-cli extension: installed, skill listed from the extension, uninstalled", [s0, s1, s2, s3, s4],
                      "installed successfully" in s1["out"] and f"extensions/design-dna/skills/{SKILL}" in s2["out"].replace("\\", "/")
                      and "No extensions installed" in s4["out"], "gemini extensions install <built folder> --consent (trust via --yes)"))
+    if GITHUB_REF:
+        home = tmp / "gemini-github"
+        home.mkdir()
+        s1 = install(home, "--target", "gemini-cli", "--method", "extension", "--from", "github", "--ref", GITHUB_REF)
+        s2 = sh(["gemini", "skills", "list"], home, home)
+        out.append(check("gemini-cli extension from GitHub: no trust question, skill listed", [s1, s2],
+                         s1["code"] == 0 and "installed successfully" in s1["out"] and "not trusted" not in s1["out"]
+                         and f"extensions/design-dna/skills/{SKILL}" in s2["out"].replace("\\", "/"),
+                         f"gemini extensions install https://github.com/<repo> --ref {GITHUB_REF} --consent, stdin closed"))
     return out
 
 
@@ -117,6 +130,18 @@ def copilot(tmp: Path) -> list[dict]:
     out.append(check("copilot plugin: local marketplace install, skill listed, uninstalled", [s1, s2, s3, s4, s5],
                      "design-dna@design-dna-local" in s2["out"] and SKILL in s3["out"] and "No plugins installed" in s5["out"],
                      "copilot plugin marketplace add + copilot plugin install design-dna@design-dna-local (Agent Plugins 1.0)"))
+    if GITHUB_REF:
+        home = tmp / "copilot-github"
+        (home / "work").mkdir(parents=True)
+        s1 = install(home, "--target", "copilot", "--method", "plugin", "--from", "github", "--ref", GITHUB_REF)
+        s2 = sh(["copilot", "plugin", "list"], home, home / "work")
+        s3 = sh(["copilot", "skill", "list"], home, home / "work")
+        s4 = sh([sys.executable, str(ROOT / "install.py"), "uninstall", "--target", "copilot", "--method", "plugin", "--from", "github"], home, ROOT)
+        s5 = sh(["copilot", "plugin", "list"], home, home / "work")
+        out.append(check("copilot plugin from GitHub: repository marketplace, no deprecation warning, uninstalled", [s1, s2, s3, s4, s5],
+                         s1["code"] == 0 and "deprecated" not in s1["out"].lower() and "design-dna@design-dna" in s2["out"]
+                         and SKILL in s3["out"] and "No plugins installed" in s5["out"],
+                         f"copilot plugin marketplace add <repo>#{GITHUB_REF} + copilot plugin install design-dna@design-dna"))
     return out
 
 
@@ -149,7 +174,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--hosts", default=",".join(HOSTS))
     ap.add_argument("--out")
+    ap.add_argument("--github-ref", help="also install from GitHub at this branch or tag (needs network access to the repository)")
     a = ap.parse_args()
+    global GITHUB_REF
+    GITHUB_REF = a.github_ref
     results = {}
     with tempfile.TemporaryDirectory(prefix="dna-hosts-") as tmp:
         for hid in a.hosts.split(","):

@@ -4,6 +4,7 @@
   python install.py list                                   # every target, how it installs, what is installed
   python install.py install --target claude-code,cursor    # skill folders (user scope)
   python install.py install --target codex --method plugin # host package managers: codex | copilot | gemini-cli | claude-code
+  python install.py install --target gemini-cli --method extension --from github   # straight from GitHub
   python install.py install --target copilot --scope project --project ~/code/my-repo
   python install.py install --target detected              # every tool found on this machine
   python install.py update                                 # refresh every copy this installer put in place
@@ -79,7 +80,7 @@ def do_install(reg, a, update=False):
     for h in hosts:
         kinds = {s["kind"] for s in h["surfaces"]}
         if a.method in ("plugin", "extension"):
-            results.append(hk.install_plugin(h, a.method, a.dry_run, a.yes))
+            results.append(hk.install_plugin(h, a.method, a.dry_run, a.yes, a.source, a.ref))
             local = True
         elif "skill-dir" in kinds:
             if update:
@@ -110,7 +111,7 @@ def cmd_uninstall(reg, a):
     results = []
     for h in targets_from(reg, a.target):
         if a.method in ("plugin", "extension"):
-            results.append(hk.uninstall_plugin(h, a.dry_run))
+            results.append(hk.uninstall_plugin(h, a.dry_run, a.source))
             continue
         if "skill_dirs" not in h:
             results.append({"host": h["id"], "actions": ["nothing installed locally: remove the uploaded skill in the tool's settings"]})
@@ -217,6 +218,9 @@ def main(argv=None) -> int:
     common.add_argument("--project", help="project folder for --scope project")
     common.add_argument("--dry-run", action="store_true", help="show what would change; write nothing")
     common.add_argument("--json", action="store_true")
+    common.add_argument("--from", dest="source", choices=["local", "github"], default="local",
+                        help="plugin/extension methods: build from this checkout (default) or install from the GitHub repository")
+    common.add_argument("--ref", help="with --from github: a branch or tag (Copilot, Gemini CLI)")
     sub.add_parser("list", parents=[common])
     for name in ("install", "update"):
         p = sub.add_parser(name, parents=[common])
