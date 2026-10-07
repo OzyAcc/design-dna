@@ -14,14 +14,16 @@
     },
     {
       "id": "copilot-plugin",
-      "name": "Copilot CLI plugin (Agent Plugins 1.0 package)",
+      "name": "Copilot CLI plugin, installed as plugin@marketplace",
       "kind": "plugin",
       "package": "agent-plugin",
       "capability": "local-agent",
       "native": true,
       "steps": [
-        "python install.py install --target copilot --method plugin",
-        "This builds a local marketplace at ~/design-dna/hosts/copilot-marketplace and, when copilot is on PATH, runs: copilot plugin marketplace add <that folder>, then copilot plugin install design-dna@design-dna-local",
+        "From GitHub: copilot plugin marketplace add OzyAcc/design-dna, then copilot plugin install design-dna@design-dna (Copilot reads the repository's .claude-plugin marketplace). The installer does the same: python install.py install --target copilot --method plugin --from github",
+        "From this checkout: python install.py install --target copilot --method plugin (builds a local marketplace at ~/design-dna/hosts/copilot-marketplace and installs design-dna@design-dna-local)",
+        "From the download: unzip design-dna-agent-plugin.zip, then copilot plugin marketplace add <unzipped folder> and copilot plugin install design-dna@design-dna-local",
+        "Avoid copilot plugin install <path or URL>: Copilot warns that direct installs are deprecated and will stop working; every route above goes through a marketplace.",
         "VS Code lists plugins installed by the Copilot CLI under Agent Plugins - Installed."
       ]
     },
@@ -91,7 +93,7 @@
   "testing": {
     "install": {
       "status": "verified",
-      "evidence": "skill folder and Agent Plugins 1.0 package through a local marketplace (Copilot CLI 1.0.92); plugin uninstall verified; docs/hosts/EVIDENCE.md#github-copilot"
+      "evidence": "skill folder; Agent Plugins 1.0 package through a local marketplace; and from GitHub through the repository's marketplace (Copilot CLI 1.0.92), each without a deprecation warning; plugin uninstall verified; docs/hosts/EVIDENCE.md#github-copilot"
     },
     "discovery": {
       "status": "verified",

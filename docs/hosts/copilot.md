@@ -16,13 +16,15 @@ python install.py install --target copilot --scope project --project <your proje
 
 Add `--dry-run` to see the changes first. The installer also runs `pip install -r requirements.txt` (skip with `--no-deps`). Without the installer, unzip [design-dna-skill.zip](https://github.com/OzyAcc/design-dna/releases/latest/download/design-dna-skill.zip) into `~/.copilot/skills/`.
 
-### Copilot CLI plugin (Agent Plugins 1.0 package)
+### Copilot CLI plugin, installed as plugin@marketplace
 
 Method: plugin / extension. Capability: **Local agent with a shell**. Runs the engine on your machine. Everything works once the Python packages and a Chromium browser are installed; python install.py doctor checks both.
 
-1. python install.py install --target copilot --method plugin
-2. This builds a local marketplace at ~/design-dna/hosts/copilot-marketplace and, when copilot is on PATH, runs: copilot plugin marketplace add <that folder>, then copilot plugin install design-dna@design-dna-local
-3. VS Code lists plugins installed by the Copilot CLI under Agent Plugins - Installed.
+1. From GitHub: copilot plugin marketplace add OzyAcc/design-dna, then copilot plugin install design-dna@design-dna (Copilot reads the repository's .claude-plugin marketplace). The installer does the same: python install.py install --target copilot --method plugin --from github
+2. From this checkout: python install.py install --target copilot --method plugin (builds a local marketplace at ~/design-dna/hosts/copilot-marketplace and installs design-dna@design-dna-local)
+3. From the download: unzip design-dna-agent-plugin.zip, then copilot plugin marketplace add <unzipped folder> and copilot plugin install design-dna@design-dna-local
+4. Avoid copilot plugin install <path or URL>: Copilot warns that direct installs are deprecated and will stop working; every route above goes through a marketplace.
+5. VS Code lists plugins installed by the Copilot CLI under Agent Plugins - Installed.
 
 Package: [design-dna-agent-plugin.zip](https://github.com/OzyAcc/design-dna/releases/latest/download/design-dna-agent-plugin.zip) (or `python install.py package --target agent-plugin`).
 
@@ -63,7 +65,7 @@ Attach a poster or social post and ask: *Scan this design with Design DNA and sa
 
 | Stage | Result | Evidence |
 |---|---|---|
-| install | ✅ verified | skill folder and Agent Plugins 1.0 package through a local marketplace (Copilot CLI 1.0.92); plugin uninstall verified; docs/hosts/EVIDENCE.md#github-copilot |
+| install | ✅ verified | skill folder; Agent Plugins 1.0 package through a local marketplace; and from GitHub through the repository's marketplace (Copilot CLI 1.0.92), each without a deprecation warning; plugin uninstall verified; docs/hosts/EVIDENCE.md#github-copilot |
 | discovery | ✅ verified | copilot skill list shows reverse-design as a personal skill and as a plugin skill; docs/hosts/EVIDENCE.md#github-copilot |
 | invocation | ⚪ untested | needs a signed-in session with a model; none was available in the build environment |
 | scan | ⚪ untested | needs a signed-in session with a model; none was available in the build environment |

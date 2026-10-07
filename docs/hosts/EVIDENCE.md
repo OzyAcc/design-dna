@@ -62,11 +62,15 @@ Gemini CLI 0.63.0.
 | Route | Result | What was observed |
 |---|---|---|
 | skill folder `~/.gemini/skills` | ✅ install, ✅ discovery | `gemini skills list` shows `reverse-design [Enabled]` at that location |
-| extension | ✅ install, ✅ discovery, ✅ uninstall | `gemini extensions validate` passes; install with `--consent` succeeds and the skill is listed from `extensions/design-dna/skills/`; `install.py uninstall --method extension` removes it |
+| extension, local build | ✅ install, ✅ discovery, ✅ uninstall | `gemini extensions validate` passes; install with `--consent` succeeds and the skill is listed from `extensions/design-dna/skills/`; `install.py uninstall --method extension` removes it |
+| extension from GitHub | ✅ install, ✅ discovery | `gemini extensions install https://github.com/OzyAcc/design-dna --ref <branch> --consent` with stdin closed: installed, no trust question; the skill is listed from the extension |
 
-Finding: besides `--consent`, Gemini CLI asks whether to trust a local extension folder and waits for an answer
-even with no terminal attached. The installer therefore refuses to answer for the user: in a terminal you answer
-it, and unattended runs need `--yes`, which sets `GEMINI_CLI_TRUST_WORKSPACE=true` for that one command.
+Problem found, then fixed: besides `--consent`, Gemini CLI asks whether to trust a **local** extension folder and
+waits for an answer even with no terminal attached, so an unattended install hung. Its source code shows the
+question is asked only for `local` and `link` sources, never for git sources. The fix: the repository now carries
+a generated `gemini-extension.json` at its root, so Gemini installs it straight from GitHub (`--from github` in
+the installer) with no question at all. The local-build route still asks; the installer lets you answer it in a
+terminal and answers it only when you pass `--yes`.
 
 ### GitHub Copilot
 
@@ -76,9 +80,12 @@ GitHub Copilot CLI 1.0.92.
 |---|---|---|
 | skill folder `~/.copilot/skills` | ✅ install, ✅ discovery | `copilot skill list` shows it under *Personal skills* |
 | plugin (Agent Plugins 1.0) via a local marketplace | ✅ install, ✅ discovery, ✅ uninstall | `copilot plugin marketplace add` + `copilot plugin install design-dna@design-dna-local`; listed as a live plugin; its skill appears under *Plugin skills*; uninstall leaves *No plugins installed* |
+| plugin from GitHub | ✅ install, ✅ discovery, ✅ uninstall | `copilot plugin marketplace add OzyAcc/design-dna#<branch>` + `copilot plugin install design-dna@design-dna`: Copilot reads the repository's `.claude-plugin/marketplace.json`; no deprecation warning |
 
-Finding: installing a plugin directly from a local path works but prints a deprecation warning ("only
-plugin@marketplace installs will be supported"), so the installer wraps the plugin in a local marketplace.
+Problem found, then fixed: installing a plugin straight from a path, repository or URL works but warns that
+"only plugin@marketplace installs will be supported in a future release". Every route now goes through a
+marketplace: the repository's own (from GitHub), a local one the installer builds, and the downloadable
+`design-dna-agent-plugin.zip`, which is now a marketplace with the plugin inside.
 
 ### OpenCode
 

@@ -23,9 +23,9 @@
       "capability": "local-agent",
       "native": true,
       "steps": [
-        "python install.py install --target gemini-cli --method extension",
-        "This builds ~/design-dna/hosts/gemini-extension/design-dna and, when gemini is on PATH, runs: gemini extensions install <that folder> --consent",
-        "Gemini CLI then asks whether to trust that folder; answer it in the terminal. Unattended runs need --yes, which trusts it for that one command (GEMINI_CLI_TRUST_WORKSPACE=true).",
+        "From GitHub (recommended): gemini extensions install https://github.com/OzyAcc/design-dna --consent; add --auto-update to follow new versions. The installer does the same: python install.py install --target gemini-cli --method extension --from github",
+        "Gemini CLI treats a GitHub URL as a git source and installs it without its trust-this-folder question, which it asks only for local folders.",
+        "From this checkout: python install.py install --target gemini-cli --method extension builds ~/design-dna/hosts/gemini-extension/design-dna and runs gemini extensions install <that folder> --consent. Gemini then asks whether to trust the folder: answer it in a terminal; unattended runs need --yes (trusts it for that one command).",
         "Restart Gemini CLI; /skills list shows reverse-design."
       ]
     }
@@ -76,7 +76,7 @@
   "testing": {
     "install": {
       "status": "verified",
-      "evidence": "skill folder and extension installed (Gemini CLI 0.63.0); extension uninstall verified; docs/hosts/EVIDENCE.md#gemini-cli"
+      "evidence": "skill folder; extension from a local build and from GitHub (Gemini CLI 0.63.0), the GitHub route with stdin closed and no trust question; extension uninstall verified; docs/hosts/EVIDENCE.md#gemini-cli"
     },
     "discovery": {
       "status": "verified",

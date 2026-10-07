@@ -24,7 +24,8 @@ python install.py install --target cursor,codex         # skill folders, user sc
 python install.py install --target detected             # every tool found on this machine
 python install.py install --target copilot --scope project --project ~/code/my-repo   # .github/skills in that repo
 python install.py install --target codex --method plugin        # through the host's own package manager
-python install.py install --target gemini-cli --method extension
+python install.py install --target gemini-cli --method extension --from github   # no trust question
+python install.py install --target copilot --method plugin --from github          # plugin@marketplace from GitHub
 python install.py doctor                                # Python, packages, Chromium, store, every visible copy
 python install.py update                                # refresh every copy the installer put in place
 python install.py uninstall --target cursor             # only unmodified copies it installed
@@ -37,6 +38,7 @@ python install.py uninstall --target cursor             # only unmodified copies
 | `--method skill\|plugin\|extension` | skill folder (default), or Codex/Copilot/Claude Code plugin, Gemini CLI extension |
 | `--force` | a folder the installer did not create, or a copy with local edits, is moved to `~/design-dna/backups/` and replaced; without it the installer refuses |
 | `--no-deps` | skip `pip install -r requirements.txt` |
+| `--from local\|github`, `--ref` | plugin and extension methods: build from this checkout (default) or install from the GitHub repository at an optional branch or tag (Gemini CLI, Copilot, Claude Code) |
 | `--yes` | unattended runs: answer a host CLI's confirmation for the package it just built (Gemini CLI asks to trust the extension folder) |
 
 Each installed copy carries `.design-dna-install.json` (version, commit, host, every file's sha256). That is how

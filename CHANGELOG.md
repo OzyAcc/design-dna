@@ -26,6 +26,11 @@ the acceptance suite runs off Windows (the first open item of the audit response
   unmodified copies they installed, refuse otherwise, and `--force` moves to a backup instead of deleting.
   `doctor` checks Python, packages, Chromium and the store, and lists every copy each host can see, flagging
   duplicates. `install.sh` / `install.ps1` wrap it and still default to Claude Code.
+- Installs straight from GitHub where the host supports it (`--from github`): Gemini CLI installs the repository as
+  an extension (a generated root `gemini-extension.json`) without the trust-this-folder question it asks for
+  local folders; Copilot installs `design-dna@design-dna` through the repository's own marketplace instead of the
+  direct path installs it is deprecating. The Copilot download is now a marketplace with the plugin inside.
+  `.claude-plugin` manifests and `gemini-extension.json` follow `VERSION`.
 - `docs/hosts/EVIDENCE.md`: AI-host results (Claude Code verified end to end in two fresh sessions; Codex, Gemini
   CLI, Copilot and OpenCode discovery verified with their own CLIs) kept separate from operating-system results.
 - `hosts/tests/`: installer and package tests for every target, and a host-discovery script that asks each host

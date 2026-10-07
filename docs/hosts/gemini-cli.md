@@ -20,9 +20,9 @@ Add `--dry-run` to see the changes first. The installer also runs `pip install -
 
 Method: plugin / extension. Capability: **Local agent with a shell**. Runs the engine on your machine. Everything works once the Python packages and a Chromium browser are installed; python install.py doctor checks both.
 
-1. python install.py install --target gemini-cli --method extension
-2. This builds ~/design-dna/hosts/gemini-extension/design-dna and, when gemini is on PATH, runs: gemini extensions install <that folder> --consent
-3. Gemini CLI then asks whether to trust that folder; answer it in the terminal. Unattended runs need --yes, which trusts it for that one command (GEMINI_CLI_TRUST_WORKSPACE=true).
+1. From GitHub (recommended): gemini extensions install https://github.com/OzyAcc/design-dna --consent; add --auto-update to follow new versions. The installer does the same: python install.py install --target gemini-cli --method extension --from github
+2. Gemini CLI treats a GitHub URL as a git source and installs it without its trust-this-folder question, which it asks only for local folders.
+3. From this checkout: python install.py install --target gemini-cli --method extension builds ~/design-dna/hosts/gemini-extension/design-dna and runs gemini extensions install <that folder> --consent. Gemini then asks whether to trust the folder: answer it in a terminal; unattended runs need --yes (trusts it for that one command).
 4. Restart Gemini CLI; /skills list shows reverse-design.
 
 Package: [design-dna-gemini-extension.zip](https://github.com/OzyAcc/design-dna/releases/latest/download/design-dna-gemini-extension.zip) (or `python install.py package --target gemini-extension`).
@@ -59,7 +59,7 @@ Attach a poster or social post and ask: *Scan this design with Design DNA and sa
 
 | Stage | Result | Evidence |
 |---|---|---|
-| install | ✅ verified | skill folder and extension installed (Gemini CLI 0.63.0); extension uninstall verified; docs/hosts/EVIDENCE.md#gemini-cli |
+| install | ✅ verified | skill folder; extension from a local build and from GitHub (Gemini CLI 0.63.0), the GitHub route with stdin closed and no trust question; extension uninstall verified; docs/hosts/EVIDENCE.md#gemini-cli |
 | discovery | ✅ verified | gemini skills list shows reverse-design [Enabled] from ~/.gemini/skills and from the extension; docs/hosts/EVIDENCE.md#gemini-cli |
 | invocation | ⚪ untested | needs a signed-in session with a model; none was available in the build environment |
 | scan | ⚪ untested | needs a signed-in session with a model; none was available in the build environment |
