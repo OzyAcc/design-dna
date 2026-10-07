@@ -153,6 +153,22 @@ the container's override removed (stock Ubuntu fontconfig, as on the runners) T0
 numbers. The renderer now hands the browser its own fontconfig file (the system configuration plus antialiasing, no
 hinting, no subpixel order); with it the full suite passes under the stock configuration, Chrome 154.0.8037.97.
 
+**Identical pixels across browser launches (after the 2.1 merge).** On GitHub's runners, renders of the same model
+occasionally differed by 2-5 pixels, so an approved baseline sometimes failed to reproduce and legitimate edits were
+refused (Windows T16, T26; Linux T10, T16, T20, T22, T27, T32, setup; never the same test twice in a row). Located
+with the new diagnostics: always the anti-aliased edge of the CTA pill, (83,1216) and (84,1217) on Linux, plus where
+the sheen crosses the pill on Windows, each pixel switching between two values. Those pixels lie in the CTA text's
+area, which is painted again after an earlier frame; Chrome's partial raster then re-rasterises only that region
+under a smaller clip, and the edge lands a few levels differently. 150 back-to-back renders on a runner were
+identical with or without any flag; the difference needs the paint-measure-paint sequence of a real render. With
+`--disable-partial-raster` every re-raster covers whole tiles:
+
+| Dispatched runs | Flags | Acceptance jobs failing (Linux + Windows) |
+|---|---|---|
+| 13-17 | before the fix | 7 of 10, all on the pill-edge pixels |
+| 18-21 | `--disable-partial-raster` + `--run-all-compositor-stages-before-draw` | 1 of 8: a screenshot timeout in T07, from the second flag, which was dropped |
+| 22-25 | `--disable-partial-raster` | 0 of 8 |
+
 The CI workflow gains an `acceptance-linux` job (ubuntu-latest, portable fonts, `requirements-lock.txt`). It runs
 on the next push to `main` or pull request; its results are not part of this report yet. macOS is untested.
 

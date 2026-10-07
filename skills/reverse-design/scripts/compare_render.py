@@ -69,6 +69,13 @@ def pixel_metrics(a, b) -> dict:
             "range": f"0-255 per channel, {'RGBA' if a.shape[-1] == 4 else 'RGB'}"}
 
 
+def diff_where(a, b, limit=8) -> str:
+    """The first differing pixels as '(x,y) before->after', so a small difference can be located, not just counted."""
+    ys, xs = np.nonzero(np.abs(a.astype(np.int16) - b.astype(np.int16)).max(axis=2))
+    return "; ".join(f"({x},{y}) {tuple(int(v) for v in a[y, x])}->{tuple(int(v) for v in b[y, x])}"
+                     for y, x in list(zip(ys.tolist(), xs.tolist()))[:limit])
+
+
 def ssim(a, b):
     from skimage.metrics import structural_similarity
 
@@ -182,6 +189,8 @@ def compare(ref_path, out_path, out_dir, scene=None, render_report=None, profile
     ap = pixel_metrics(ref, out)
     rep["checks"]["exact_pixels"] = dict(pm, status="pass" if pm["unequal_pixels"] == 0 else "fail", achieved_by=how,
                                          claim="decoded RGBA identity (no matte)")
+    if pm["unequal_pixels"]:
+        rep["checks"]["exact_pixels"]["where"] = diff_where(decode_rgba(ref_path), decode_rgba(out_path))
     rep["checks"]["appearance"] = dict(ap, status="info", claim=f"appearance after compositing over rgb{bg}")
     rep["checks"]["pixel_error"] = dict(mae=ap["mae"], rmse=ap["rmse"], status="info")
     g, gset = ssim(ref, out)

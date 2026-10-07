@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 
 from common import DnaError, model_hash, now, read_json, sha256_bytes, sha256_file, template_dir, write_immutable, write_json
-from compare_render import compare, decode, pixel_metrics
+from compare_render import compare, decode, diff_where, pixel_metrics
 from index_templates import rebuild
 from render_static import current_environment, render
 from renderer_env import fingerprint, make_pin, requested_channel
@@ -78,9 +78,10 @@ def reconstruct(tid, mode="editable") -> dict:
               "report": str(out / "compare" / "report.json"), "verdict": rep["overall"], "pin_check": r["pin_check"],
               "artifacts": [str(out / "compare" / f) for f in ("side_by_side.png", "overlay_50.png", "diff_heatmap.png")]}
     if same_model:
-        pm = pixel_metrics(decode(r["png"])[0], decode(tdir / approved["path"])[0])
+        a, b = decode(tdir / approved["path"])[0], decode(r["png"])[0]
+        pm = pixel_metrics(b, a)
         result["reproduces_approved_baseline"] = {"unequal_pixels": pm["unequal_pixels"], "status": "pass" if pm["unequal_pixels"] == 0 else "fail",
-                                                  "approved": approved["path"]}
+                                                  "approved": approved["path"], "where": diff_where(a, b) if pm["unequal_pixels"] else ""}
     else:
         passport["baseline_render"] = _approval(tdir, scene, r)
         passport["render_pin"] = make_pin(r["render_profile"], "baseline approved by reconstruct")
