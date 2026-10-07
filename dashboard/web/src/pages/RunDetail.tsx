@@ -138,7 +138,7 @@ function OutputDrawer({ id, onClose, onChanged, onOpen }: { id: string; onClose:
           </div>
           <div className="stack">
             {o.error && <div className={`notice ${o.status === "failed" ? "bad" : "warn"} small`}><strong>{o.error.kind === "conflict" ? "Conflict" : o.error.kind === "provider" ? "Provider" : o.error.kind === "infrastructure" ? "Infrastructure"
-                : o.error.kind === "renderer_drift" ? "Renderer changed" : o.error.kind === "interrupted" ? "Interrupted" : "Problem"}:</strong> {o.error.message}
+                : o.error.kind === "renderer_drift" ? "Renderer changed" : o.error.kind === "baseline_not_reproduced" ? "Baseline not reproduced" : o.error.kind === "interrupted" ? "Interrupted" : "Problem"}:</strong> {o.error.message}
               {o.error.conflicts && <ul className="tight">{o.error.conflicts.slice(0, 6).map((c: any, i: number) => <li key={i}>{c.message || c.problem || c.constraint || c.lock || JSON.stringify(c).slice(0, 140)}{c.detail?.options ? ` — options: ${c.detail.options.join("; ")}` : c.resolve ? ` — ${c.resolve}` : ""}</li>)}</ul>}</div>}
             <div><span className="label">Text used</span>
               {(o.inputs?.slots || []).map((s: any) => <div key={s.slot_id} className="field" style={{ marginBottom: 8 }}>

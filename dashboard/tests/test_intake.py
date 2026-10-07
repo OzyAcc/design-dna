@@ -159,6 +159,37 @@ class T27Protections(unittest.TestCase):
         self.assertEqual(client.get(f"/api/templates/{base['id']}/files/work/source/canonical.png").status_code, 200)
         S.record("T27.bundles_paths", {"unsafe_bundle": 422, "traversal": "refused"})
 
+    def test_workspace_authentication(self):
+        from fastapi.testclient import TestClient
+
+        from dna_dashboard import __main__ as cli
+
+        s = S.config.get()
+        s.auth_token = "a-long-workspace-token"
+        try:
+            c = TestClient(S.create_app())
+            self.assertEqual(c.get("/api/health").status_code, 200)
+            self.assertEqual(c.get("/api/auth/status").json(), {"required": True, "authenticated": False})
+            self.assertEqual(c.get("/api/templates").status_code, 401)
+            self.assertEqual(c.get("/api/templates", headers={"Authorization": "Bearer wrong"}).status_code, 401)
+            self.assertEqual(c.get("/api/templates", headers={"Authorization": f"Bearer {s.auth_token}"}).status_code, 200)
+            self.assertEqual(c.post("/api/auth/login", json={"token": "wrong"}).status_code, 401)
+            self.assertEqual(c.post("/api/auth/login", json={"token": s.auth_token}).status_code, 200)
+            self.assertEqual(c.get("/api/templates").status_code, 200, "the session cookie authenticates reads")
+            r = c.post("/api/collections", json={"name": "Auth probe"})
+            self.assertEqual((r.status_code, r.json()["error"]["code"]), (403, "csrf"), "a cookie-authenticated write needs the request header")
+            self.assertEqual(c.post("/api/collections", json={"name": "Auth probe"}, headers={"X-DNA-Request": "1"}).status_code, 200)
+            c.post("/api/auth/logout")
+            self.assertEqual(c.get("/api/templates").status_code, 401)
+            s.host = "0.0.0.0"
+            cli._guard_bind(s)  # with a token, a public bind is allowed
+            s.auth_token = None
+            with self.assertRaises(SystemExit):
+                cli._guard_bind(s)  # without one it refuses to start
+        finally:
+            s.auth_token, s.host = None, "127.0.0.1"
+        S.record("T27.auth", {"no_token": 401, "bearer": 200, "cookie_write_without_header": 403, "public_bind_without_token": "refused"})
+
 
 if __name__ == "__main__":
     unittest.main()

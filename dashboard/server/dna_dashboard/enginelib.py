@@ -90,7 +90,11 @@ def pixel_diff(a, b) -> dict:
     if x.shape != y.shape:
         return {"unequal_pixels": None, "status": "fail", "reason": f"dimensions differ {x.shape[:2]} vs {y.shape[:2]}"}
     pm = pixel_metrics(x, y)
-    return {"unequal_pixels": pm["unequal_pixels"], "max_channel_error": pm["max_channel_error"],
+    import numpy as np
+
+    ys, xs = np.nonzero(np.any(x != y, axis=2))
+    box = [int(xs.min()), int(ys.min()), int(xs.max()) - int(xs.min()) + 1, int(ys.max()) - int(ys.min()) + 1] if len(xs) else None
+    return {"unequal_pixels": pm["unequal_pixels"], "max_channel_error": pm["max_channel_error"], "box": box,
             "status": "pass" if pm["unequal_pixels"] == 0 else "fail"}
 
 

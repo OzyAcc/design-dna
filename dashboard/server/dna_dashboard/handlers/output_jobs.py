@@ -216,7 +216,25 @@ def _refused(ctx, o, odir, e: EngineError, prov_meta):
             shutil.copyfile(art, ev / "visual_diff.png")
             files.append(_file(ev / "visual_diff.png", "evidence", "refused/visual_diff.png"))
     codes = {c.get("code") for c in conflicts if isinstance(c, dict)}
-    if "renderer_drift" in codes:
+    abl = v.get("approved_baseline") or {}
+    not_reproduced, repro = abl.get("pinned_re_render_reproduces_it") is False, None
+    if not_reproduced:  # audit A2: the pinned renderer did not reproduce the approved baseline
+        tdir = ctx.home / "templates" / ts.version(ctx.conn, o["template_version_id"])["engine_id"]
+        approved, rerender = tdir / abl["path"], Path((v.get("renders") or {}).get("base") or "")
+        if approved.exists() and rerender.is_file():
+            repro = el.pixel_diff(approved, rerender)
+            ev.mkdir(exist_ok=True)
+            for src, name in ((approved, "approved-baseline.png"), (rerender, "baseline-re-render.png")):
+                shutil.copyfile(src, ev / name)
+                files.append(_file(ev / name, "evidence", f"refused/{name}"))
+    if not_reproduced:
+        where = f" in the box {repro['box']}" if repro and repro.get("box") else ""
+        kind, msg = "baseline_not_reproduced", (
+            "the pinned renderer did not reproduce this template's approved baseline in this run"
+            + (f" ({repro['unequal_pixels']} px differ, max channel error {repro['max_channel_error']}{where})" if repro else "")
+            + ". Nothing was committed and no tolerance was applied. Retry this output; if it repeats, rebuild the template to "
+              "re-check its reproducibility.")
+    elif "renderer_drift" in codes:
         kind, msg = "renderer_drift", ("the renderer differs from this template's pinned baseline, so preservation cannot be checked; "
                                        "preview and confirm a renderer migration on the template page, then retry")
     elif "renderer_unavailable" in codes:
@@ -224,6 +242,8 @@ def _refused(ctx, o, odir, e: EngineError, prov_meta):
     else:
         kind, msg = "conflict", "the engine refused this output; nothing was committed"
     err = {"kind": kind, "message": msg, "conflicts": json.loads(json.dumps(conflicts, default=str))[:20]}
+    if repro is not None:
+        err["baseline_reproduction"] = repro
     checks = summarize_checks(txn, None) if v else {"path": "adapt", "verification_status": "not_run"}
     _set_output(ctx.conn, o["id"], status="needs_review", files=files, checks=checks, error=err,
                 provenance={"path": o["mode"], "generated": prov_meta}, limitations=["refused by the engine: see conflicts"])

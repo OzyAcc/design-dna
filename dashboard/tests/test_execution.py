@@ -266,6 +266,58 @@ class T19ProvidersMissingOrFailing(unittest.TestCase):
         S.record("T19.failures", seen)
 
 
+class T22BaselineNotReproduced(unittest.TestCase):
+    def test_a_non_reproducing_render_is_a_named_refusal_with_evidence(self):
+        """Audit A2. The engine's own check is covered by engine T36 and by real occurrences under load; this test feeds the
+        refusal it produces (a re-render 3 px off the approved baseline) through the dashboard's handling of it."""
+        import shutil
+        import tempfile
+        from types import SimpleNamespace
+
+        from dna_dashboard import templates_svc as ts
+        from dna_dashboard.engine import EngineError
+        from dna_dashboard.handlers import output_jobs
+
+        v, ps = setup_shared()
+        r = submit(batch(v, ps[:1], name="baseline not reproduced"), "t22-repro")
+        o = run(r["run_id"])["outputs"][0]
+        conn = S.db.connect()
+        S.jobs.request_cancel(conn, o["job_id"])  # this probe drives the handler's refusal path directly
+        orow = S.db.one(conn, "SELECT * FROM outputs WHERE id = ?", (o["id"],))
+        ver = ts.version(conn, o["template_version_id"])
+        rel = ver["summary"]["baseline"]["approved"]["path"]
+        home = Path(tempfile.mkdtemp(dir=S.DATA))
+        approved = home / "templates" / ver["engine_id"] / rel
+        approved.parent.mkdir(parents=True)
+        shutil.copyfile(ts.version_dir(ver) / rel, approved)
+        im = Image.open(approved).convert("RGBA")
+        for xy in ((62, 905), (63, 905), (63, 906)):  # the pixels and size of the difference seen in this environment
+            px = im.getpixel(xy)
+            im.putpixel(xy, (px[0] ^ 32, px[1], px[2], px[3]))
+        rerender = home / "base-render.png"
+        im.save(rerender)
+        err = EngineError({"code": "verification_failed", "message": "verification failed",
+                           "detail": {"conflicts": [{"verification": "failed", "detail": "see verification"}],
+                                      "verification": {"status": "fail", "renders": {"base": str(rerender)},
+                                                       "approved_baseline": {"path": rel, "pinned_re_render_reproduces_it": False}}}})
+        odir = S.config.get().outputs / o["id"]
+        odir.mkdir(parents=True, exist_ok=True)
+        status, _ = output_jobs._refused(SimpleNamespace(home=home, conn=conn), orow, odir, err, None)
+        self.assertEqual(status, "needs_review")
+        o = ok(client.get(f"/api/outputs/{o['id']}"))
+        self.assertEqual((o["status"], o["error"]["kind"]), ("needs_review", "baseline_not_reproduced"))
+        self.assertEqual(o["error"]["baseline_reproduction"]["unequal_pixels"], 3)
+        self.assertEqual(o["error"]["baseline_reproduction"]["box"], [62, 905, 2, 2])
+        self.assertIn("no tolerance was applied", o["error"]["message"])
+        names = {f["name"] for f in o["files"]}
+        self.assertTrue({"refused/approved-baseline.png", "refused/baseline-re-render.png"} <= names, names)
+        self.assertEqual(client.post(f"/api/outputs/{o['id']}/review", json={"state": "approved"}).status_code, 409)
+        rt = ok(client.post(f"/api/outputs/{o['id']}/retry", json={"idempotency_key": "t22-retry"}))
+        S.drain()
+        self.assertEqual(ok(client.get(f"/api/outputs/{rt['output_id']}"))["status"], "completed", "a retry renders again; no paid request involved")
+        S.record("T22.dashboard", {"refusal": o["error"]["kind"], "evidence": sorted(names), "retry": "completed"})
+
+
 class T23PartialFailureRetryCancel(unittest.TestCase):
     def test_unknown_outcome_needs_confirmation_and_retry_is_a_new_revision(self):
         v, ps = setup_shared()

@@ -55,7 +55,7 @@ def build_workspace() -> dict:
     run = ok(client.post(f"/api/batches/{bid}/submit", json={"idempotency_key": "screenshots-run"}))
     S.drain()
     outs = ok(client.get(f"/api/runs/{run['run_id']}"))["outputs"]
-    for o in outs[:2]:
+    for o in [o for o in outs if o["status"] == "completed"][:2]:
         ok(client.post(f"/api/outputs/{o['id']}/review", json={"state": "approved"}))
     # a second batch left as a draft, so the composer shows work in progress
     m2 = ok(client.post("/api/batches", json={"name": "Autumn catalogue (draft)", "template_versions": [{"version_id": base["version"]["id"]}],
