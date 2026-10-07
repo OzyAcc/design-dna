@@ -27,9 +27,10 @@ COLOR_POLICY = "sRGB forced; image assets untagged -> treated as sRGB"
 # Raster scheduling. With partial raster, a region painted again after an earlier frame (fonts arriving, the fit
 # measurement touching text) is re-rasterised under a smaller clip, and anti-aliased edges inside it can land a few
 # levels differently: seen on CI runners as 2-5 pixels of a rounded rectangle's edge differing between launches of the
-# same model. Every re-raster now covers whole tiles, and a frame is drawn only after all raster work has finished.
-# Recorded apart from browser_args so that pins made before 2.1.0 are not declared drifted by it.
-DETERMINISM_ARGS = ["--disable-partial-raster", "--run-all-compositor-stages-before-draw"]
+# same model. Every re-raster now covers whole tiles. (--run-all-compositor-stages-before-draw was tried too and is
+# left out: it made a headless screenshot wait past its timeout.) Recorded apart from browser_args so that pins made
+# before 2.1.0 are not declared drifted by it.
+DETERMINISM_ARGS = ["--disable-partial-raster"]
 # Chrome on Linux takes per-font hinting and subpixel settings from fontconfig, and stock distributions turn on slight
 # hinting: --font-render-hinting=none does not reach every text path, so the same text rasterised differently in a
 # full scene and in a fitting page. On Linux the browser gets a fontconfig file that includes the system configuration
