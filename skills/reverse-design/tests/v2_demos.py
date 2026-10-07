@@ -360,7 +360,7 @@ def t21(root, fx, record, expect_error):
                                                                                     "ops": [{"op": "move", "node": "logo", "dx": -4, "dy": 0}]}), "renderer_drift")
         preview = dna.migrate_baseline("drift-probe")
         unchanged = read_json(tdir / "passport.json")["render_pin"] == pin
-        done = dna.migrate_baseline("drift-probe", confirm=True)
+        done = dna.migrate_baseline("drift-probe", confirm=True, preview_id=preview["preview_id"])
         after = read_json(tdir / "passport.json")
         ok_new = render(scene, tdir, o / "renders-after-migration", name="baseline")["pin_check"]["status"] == "match"
     finally:

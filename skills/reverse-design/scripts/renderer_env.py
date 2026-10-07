@@ -33,7 +33,10 @@ TEXT_RENDERING = ("fontconfig enforced: antialias, no hinting, no subpixel order
 # Environment fields. Viewport, alpha and the font list are recorded too, but they follow the scene (a reflow changes
 # the viewport, an adaptation may add a font asset), so they are not drift; a pinned font still in use must keep its hash.
 HARD = ("channel", "browser_version", "device_scale_factor", "browser_args", "color_policy", "font_synthesis", "text_rendering")
-SINCE_2_1 = ("text_rendering",)  # pins made before 2.1.0 do not record it: compared once a pin does
+# Pins made before 2.1.0 do not record these hard fields. An unrecorded policy is not evidence that the policy matched:
+# it is reported as a hard difference, so preservation stays unclaimed until a reviewed migration records it.
+SINCE_2_1 = ("text_rendering",)
+UNRECORDED = "unrecorded (pin predates this field)"
 SOFT = ("playwright", "python", "os", "packages")
 RECORDED = ("viewport", "alpha", "fonts", "animations", "randomness", "renderer")
 PACKAGES = ("pillow", "numpy", "scikit-image", "scipy", "fonttools", "jsonschema", "playwright")
@@ -128,6 +131,13 @@ def environment(channel, browser_version, W, H, alpha, fonts) -> dict:
             "packages": {k: _pkg(k) for k in PACKAGES}}
 
 
+def fingerprint(profile) -> dict:
+    """The hard renderer fields plus the font files a render used: what must be equal for two renders to be comparable."""
+    fp = {k: profile.get(k) for k in HARD}
+    fp["fonts"] = sorted(f["sha256"] for f in profile.get("fonts", []))
+    return fp
+
+
 def make_pin(profile, reason="baseline approved") -> dict:
     pin = {k: profile[k] for k in HARD + SOFT + RECORDED if k in profile}
     pin.update(pinned_at=now(), reason=reason)
@@ -139,6 +149,9 @@ def compare_pin(pin, env) -> dict:
     def diffs(keys):
         return [{"field": k, "pinned": pin.get(k), "current": env.get(k)} for k in keys if pin.get(k) != env.get(k)]
     hard = diffs([k for k in HARD if k in pin or k not in SINCE_2_1])
+    hard += [{"field": k, "pinned": UNRECORDED, "current": env.get(k), "legacy_pin": True,
+              "decision": "the pinned baseline's policy is unknown: preview a migration and confirm it before claiming preservation"}
+             for k in SINCE_2_1 if k not in pin]
     now_fonts = {f["asset"]: f["sha256"] for f in env.get("fonts", [])}
     for f in pin.get("fonts", []):
         if f["asset"] in now_fonts and now_fonts[f["asset"]] != f["sha256"]:
@@ -161,4 +174,5 @@ def drift_error(pin, diff, where="render") -> DnaError:
     return DnaError(f"renderer environment differs from the pinned baseline environment ({where}); "
                     "reproducibility cannot be claimed until the baseline is explicitly migrated",
                     "renderer_drift", {"hard": diff["hard"], "soft": diff["soft"], "pinned_at": pin.get("pinned_at"),
-                                       "fix": "dna.py 'migrate-baseline \"<template>\"' to preview the change, then add confirm"})
+                                       "fix": "dna.py 'migrate-baseline \"<template>\"' to preview the change, review it, then "
+                                              "'migrate-baseline \"<template>\" confirm preview=<preview id>'"})

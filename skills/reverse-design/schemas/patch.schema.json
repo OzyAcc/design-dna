@@ -22,7 +22,7 @@
         },
         "allOf": [
           {"if": {"properties": {"op": {"const": "set"}}}, "then": {"required": ["path", "value"]}},
-          {"if": {"properties": {"op": {"const": "replace"}}}, "then": {"required": ["node", "file"], "properties": {"preserve": {"type": "array", "items": {"enum": ["treatment", "crop-intent", "anchor", "mask", "effects"]}}, "baked_effects": {"type": "array", "items": {"type": "string"}}}}},
+          {"if": {"properties": {"op": {"const": "replace"}}}, "then": {"required": ["node", "file"], "properties": {"preserve": {"type": "array", "items": {"enum": ["treatment", "crop-intent", "anchor", "mask", "effects"]}}, "baked_effects": {"type": "array", "items": {"type": "string"}}, "source": {"enum": ["supplied", "generated"], "description": "provenance of the new image file; generated images are never recorded as supplied originals"}}}},
           {"if": {"properties": {"op": {"const": "move"}}}, "then": {"required": ["node", "dx", "dy"]}},
           {"if": {"properties": {"op": {"const": "resize"}}}, "then": {"required": ["node", "w", "h"], "properties": {"anchor": {"enum": ["top-left", "center", "top-right", "bottom-left", "bottom-right"]}}}},
           {"if": {"properties": {"op": {"const": "remove"}}}, "then": {"required": ["node"]}},

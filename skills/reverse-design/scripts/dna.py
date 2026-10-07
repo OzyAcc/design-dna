@@ -210,8 +210,8 @@ def run(line: str):
     if cmd == "batch":
         tid, vid = current()
         return transact(tid, vid, read_json(args[0]))
-    if cmd == "migrate-baseline":  # migrate-baseline "<T>" [confirm]
-        return migrate_baseline(resolve_template(args[0])["id"], confirm="confirm" in args)
+    if cmd == "migrate-baseline":  # migrate-baseline "<T>" [confirm preview=<preview id>]
+        return migrate_baseline(resolve_template(args[0])["id"], confirm="confirm" in args, preview_id=kv(args).get("preview"))
     if cmd == "export-template":  # export-template "<T>" to <dir | file.dnab> [fonts=reference]
         return export_bundle(args[0], args[args.index("to") + 1], kv(args).get("fonts", "embed"))
     if cmd == "validate-bundle":  # validate-bundle <file> [font-dir=<dir>]

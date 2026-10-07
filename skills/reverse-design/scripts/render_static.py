@@ -417,6 +417,14 @@ def _isolated_bounds(page, scene, W, H, mask_dir=None) -> dict:
     return out
 
 
+def current_environment(scene, tdir, channel=None) -> dict:
+    """The environment a render of `scene` would use now (browser launched for its version; nothing is rendered)."""
+    _, fonts = compile_svg(scene, tdir)
+    font_recs = [{"asset": a, "sha256": scene["assets"][a]["sha256"], "names": scene["assets"][a].get("font_names")} for a in fonts]
+    with browser(channel) as (b, ch):
+        return environment(ch, b.version, int(scene["canvas"]["width"]), int(scene["canvas"]["height"]), scene["canvas"]["alpha"], font_recs)
+
+
 def render(scene, tdir, out_dir, isolate=False, formats=("png",), name="render", svg_fonts="embed",
            pin_policy="enforce") -> dict:
     """Render scene to <out_dir>/<name>.png (+ self-contained .svg + manifest + round-trip check).

@@ -272,8 +272,153 @@ def r33(root, fx, record, expect_error):
     })
 
 
+def _probe_copy(root, as_id):
+    """An independent copy of the approved fixture template (bundle round trip), so probes cannot disturb it."""
+    from bundle import export_bundle, import_bundle
+
+    b = export_bundle(TID, Path(root) / "probe-bundles")
+    import_bundle(b["bundle"], as_id=as_id)
+    return template_dir(as_id)
+
+
+def r34(root, fx, record, expect_error):
+    """Dashboard audit A1: a legacy pin without the text-rendering policy is not silently treated as matching."""
+    o = folder(root, 34, "legacy-pin-policy")
+    tdir = _probe_copy(root, "legacy-pin-probe")
+    scene, pp = read_json(tdir / "scene.json"), read_json(tdir / "passport.json")
+    legacy = deep(pp)
+    legacy["render_pin"].pop("text_rendering")
+    write_json(tdir / "passport.json", legacy)
+    ok_render, e_render = expect_error(lambda: render(scene, tdir, o / "should-not-render"), "renderer_drift")
+    fields = {d["field"]: d for d in (e_render.detail["hard"] if e_render else [])}
+    from apply_patch import new_variant, transact
+
+    m = new_variant("legacy-pin-probe", "edit under a legacy pin")
+    ok_edit, _ = expect_error(lambda: transact("legacy-pin-probe", m["id"], {"schema_version": "1.0.0", "base_revision": scene["revision"],
+                                                                          "ops": [{"op": "move", "node": "logo", "dx": -4, "dy": 0}]}), "renderer_drift")
+    preview = dna.migrate_baseline("legacy-pin-probe")
+    ok_unnamed, e_unnamed = expect_error(lambda: dna.migrate_baseline("legacy-pin-probe", confirm=True), "preview_required")
+    done = dna.migrate_baseline("legacy-pin-probe", confirm=True, preview_id=preview["preview_id"])
+    after = read_json(tdir / "passport.json")
+    ok_now = render(scene, tdir, o / "after-decision", name="render")["pin_check"]["status"] == "match"
+    write_json(o / "results.json", {"drift": e_render.as_dict() if e_render else None, "preview": preview, "confirmed": done,
+                                    "unnamed_confirm": e_unnamed.as_dict() if e_unnamed else None})
+    record(34, "Audit A1: a legacy pin with an unrecorded text-rendering policy needs an explicit decision", {
+        "render refused with renderer_drift (nothing written)": ok_render and not (o / "should-not-render" / "render.png").exists(),
+        "the drift names text_rendering as unrecorded in the legacy pin": "text_rendering" in fields and fields["text_rendering"].get("legacy_pin") is True,
+        "an edit under the legacy pin is rejected": ok_edit,
+        "preview reports migration_required with a preview id": preview["status"] == "migration_required" and preview["preview_id"].startswith("mp-"),
+        "confirming without naming the preview is refused": ok_unnamed,
+        "named confirmation records the decision and the new pin carries the policy": done["status"] == "migrated"
+        and after["render_pin"].get("text_rendering") == scene_policy() and after["render_migrations"][-1]["preview_id"] == preview["preview_id"],
+        "renders match the pin after the decision": ok_now,
+    }, [o / "results.json"], notes=f"{preview['vs_approved_baseline']['unequal_pixels']} px differ from the previous approved baseline")
+
+
+def scene_policy():
+    from renderer_env import TEXT_RENDERING
+
+    return TEXT_RENDERING
+
+
+def r35(root, fx, record, expect_error):
+    """Dashboard audit A3: confirmation adopts exactly the reviewed candidate; stale or altered previews are refused."""
+    import baseline
+
+    o = folder(root, 35, "migration-preview-binding")
+    tid = "migration-binding-probe"
+    tdir = _probe_copy(root, tid)
+    original = read_json(tdir / "passport.json")["baseline_render"]
+    p1 = dna.migrate_baseline(tid)
+    p2 = dna.migrate_baseline(tid)
+    done = dna.migrate_baseline(tid, confirm=True, preview_id=p2["preview_id"])
+    pp = read_json(tdir / "passport.json")
+    adopted_is_reviewed = pp["baseline_render"]["path"] == done["adopted"]["path"] and pp["baseline_render"]["sha256"] == p2["candidate_sha256"]
+    no_new_render = len(list(tdir.glob("baseline/*-migration-*"))) == 2
+    ok_stale_pin, e1 = expect_error(lambda: dna.migrate_baseline(tid, confirm=True, preview_id=p1["preview_id"]), "stale_preview")
+    p3 = dna.migrate_baseline(tid)
+    cand = tdir / read_json(tdir / p3["preview_record"])["candidate"]["path"]
+    saved = cand.read_bytes()
+    cand.write_bytes(saved + b"\0")
+    ok_changed, e2 = expect_error(lambda: dna.migrate_baseline(tid, confirm=True, preview_id=p3["preview_id"]), "changed_candidate")
+    cand.write_bytes(saved)
+    scene_file = tdir / "scene.json"
+    keep = scene_file.read_bytes()
+    s = read_json(scene_file)
+    s["verification"]["tolerances"]["justification"] = "edited after the preview"
+    write_json(scene_file, s)
+    ok_model, e3 = expect_error(lambda: dna.migrate_baseline(tid, confirm=True, preview_id=p3["preview_id"]), "stale_preview")
+    scene_file.write_bytes(keep)
+    real_env = baseline.current_environment
+    baseline.current_environment = lambda *a, **k: dict(real_env(*a, **k), browser_version="0.0.0.0-changed-after-preview")
+    try:
+        ok_env, e4 = expect_error(lambda: dna.migrate_baseline(tid, confirm=True, preview_id=p3["preview_id"]), "stale_preview")
+    finally:
+        baseline.current_environment = real_env
+    unchanged = read_json(tdir / "passport.json")["baseline_render"] == pp["baseline_render"]
+    write_json(o / "results.json", {"p1": p1, "p2": p2, "confirmed": done, "stale_pin": e1.as_dict() if e1 else None,
+                                    "changed_candidate": e2.as_dict() if e2 else None, "changed_model": e3.as_dict() if e3 else None,
+                                    "changed_renderer": e4.as_dict() if e4 else None})
+    record(35, "Audit A3: migration confirmation is bound to the exact reviewed preview", {
+        "two previews get distinct immutable ids": p1["preview_id"] != p2["preview_id"],
+        "confirmation adopts the reviewed candidate file itself (same sha256)": adopted_is_reviewed,
+        "confirmation renders nothing new": no_new_render,
+        "previous approved baseline kept on disk with the migration record": (tdir / original["path"]).exists()
+        and pp["render_migrations"][-1]["previous_baseline_sha256"] == original["sha256"],
+        "a preview made before another confirmation is stale": ok_stale_pin,
+        "an altered candidate file is refused": ok_changed,
+        "a model change after the preview is refused": ok_model,
+        "a renderer change after the preview is refused": ok_env,
+        "every refusal left the approved baseline unchanged": unchanged,
+    }, [o / "results.json"])
+
+
+REPRO_RUNS = int(os.environ.get("DESIGN_DNA_REPRO_RUNS", "4"))
+
+
+def r36(root, fx, record, expect_error):
+    """Dashboard audit A2: repeated fresh-process renders of the approved baseline and of a controlled edit."""
+    import subprocess
+    import sys
+
+    from compare_render import decode_rgba, pixel_metrics
+
+    o = folder(root, 36, "fresh-process-reproducibility")
+    tdir = template_dir(TID)
+    pp = read_json(tdir / "passport.json")
+    base = read_json(tdir / "scene.json")
+    edit = deep(base)
+    next(n for n in edit["nodes"] if n["id"] == "n-headline")["content"] = "Carry the\nquiet certainty."
+    write_json(o / "edit-scene.json", edit)
+    scripts = Path(__file__).resolve().parents[1] / "scripts"
+    runs = {"baseline": [], "edit": []}
+    for kind, scene_file in (("baseline", tdir / "scene.json"), ("edit", o / "edit-scene.json")):
+        for i in range(REPRO_RUNS):
+            out_dir = o / f"{kind}-run{i}"
+            r = subprocess.run([sys.executable, str(scripts / "render_static.py"), TID, "--scene", str(scene_file), "--out", str(out_dir),
+                                "--formats", "png", "--name", "render"], capture_output=True, text=True, env=dict(os.environ))
+            runs[kind].append({"run": i, "returncode": r.returncode, "png": str(out_dir / "render.png"), "log": r.stdout[-400:] + r.stderr[-400:]})
+    approved = decode_rgba(tdir / pp["baseline_render"]["path"])
+    res = {}
+    for kind, items in runs.items():
+        ref = approved if kind == "baseline" else (decode_rgba(items[0]["png"]) if Path(items[0]["png"]).exists() else None)
+        for it in items:
+            if Path(it["png"]).exists() and ref is not None:
+                pm = pixel_metrics(ref, decode_rgba(it["png"]))
+                it.update(unequal_pixels=pm["unequal_pixels"], max_channel_error=pm["max_channel_error"])
+        res[kind] = items
+    write_json(o / "results.json", {"runs_per_kind": REPRO_RUNS, "compared_to": {"baseline": pp["baseline_render"]["path"], "edit": "edit run 0"},
+                                    "results": res, "rule": "exact preservation requires 0 differing decoded RGBA pixels; no tolerance applied"})
+    record(36, f"Audit A2: {REPRO_RUNS} fresh-process renders reproduce the approved baseline and a controlled edit exactly", {
+        f"baseline run {it['run']} ({it.get('unequal_pixels', 'no render')} px differ)": it.get("unequal_pixels") == 0 or it
+        for it in res["baseline"]} | {
+        f"edit run {it['run']} vs edit run 0 ({it.get('unequal_pixels', 'no render')} px differ)": it.get("unequal_pixels") == 0 or it
+        for it in res["edit"]}, [o / "results.json"], notes="any difference is retained as evidence and is never relabelled as identity")
+
+
 def run(root, fx, record, want, expect_error):
-    for n, fn in ((24, r24), (25, r25), (26, r26), (27, r27), (28, r28), (29, r29), (30, r30), (31, r31), (32, r32), (33, r33)):
+    for n, fn in ((24, r24), (25, r25), (26, r26), (27, r27), (28, r28), (29, r29), (30, r30), (31, r31), (32, r32), (33, r33),
+                  (34, r34), (35, r35), (36, r36)):
         if not want(n):
             continue
         try:
