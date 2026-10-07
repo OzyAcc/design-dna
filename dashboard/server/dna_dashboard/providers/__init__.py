@@ -8,11 +8,12 @@ from __future__ import annotations
 
 from .. import config
 from .anthropic_provider import AnthropicProvider
-from .base import Provider, ProviderError, cached_health, tracked
+from .base import Provider, ProviderError, cached_health, checkpoint_valid, provider_call, tracked
 from .mock import MockProvider
 from .openai_provider import OpenAIImageProvider
 
-__all__ = ["Provider", "ProviderError", "cached_health", "tracked", "all_providers", "for_capability", "set_mock_failure"]
+__all__ = ["Provider", "ProviderError", "cached_health", "checkpoint_valid", "provider_call", "tracked", "all_providers", "for_capability",
+           "set_mock_failure"]
 
 _MOCK_FAIL: dict[str, str | None] = {"value": None}
 

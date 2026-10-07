@@ -299,6 +299,22 @@ def version_dir(v: dict) -> Path:
     return Path(v["bundle_path"]).parent / f"v{v['number']}"
 
 
+_SCENES: dict[str, dict] = {}
+
+
+def version_scene(v: dict) -> dict:
+    """The scene a version renders: an edited copy's design head, else the base scene (cached: versions are immutable)."""
+    if v["id"] not in _SCENES:
+        d = version_dir(v)
+        scene = el.read_json(d / "scene.json")
+        dv = v.get("design_variant")
+        if dv and (d / "variants" / dv / "variant.json").exists():
+            head = v["design_head"] if v.get("design_head") is not None else el.read_json(d / "variants" / dv / "variant.json")["head"]
+            scene = el.read_json(d / "variants" / dv / "revisions" / f"rev-{head:04d}.json")
+        _SCENES[v["id"]] = scene
+    return _SCENES[v["id"]]
+
+
 def public_version(v: dict) -> dict:
     s = v.get("summary") or {}
     return {"id": v["id"], "template_id": v["template_id"], "number": v["number"], "readiness": v["readiness"],

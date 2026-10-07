@@ -6,7 +6,9 @@ test is skipped, unless DNA_REQUIRE_UI_TEST=1 (CI), where a missing build is a f
 """
 from __future__ import annotations
 
+import asyncio
 import os
+import re
 import socket
 import threading
 import time
@@ -45,26 +47,17 @@ def _free_port() -> int:
     return port
 
 
-@unittest.skipUnless(REQUIRE or (DIST / "index.html").exists(), "the web app is not built (npm run build in dashboard/web)")
-class T28Browser(unittest.TestCase):
+class _Browser(unittest.TestCase):
+    """The built app served by a real uvicorn server, driven by Playwright's Chromium."""
+
     @classmethod
-    def setUpClass(cls):
+    def start(cls, wrap=None):
         import uvicorn
 
-        base = S.base_template()
-        cls.copy = S.copy_of(base["id"], "UI probe copy")
-        p = S.product("UI chair", (120, 140, 100))
-        m = ok(client.post("/api/batches", json={"name": "UI batch", "template_versions": [{"version_id": base["version"]["id"]}],
-                                                 "product_ids": [p["id"]]}))
-        pr = m["pairs"][0]
-        hs = next(s for s in pr["slots"] if s["role"] == "headline")["slot_id"]
-        ok(client.patch(f"/api/batches/{m['batch']['id']}/pairs/{pr['pair_id']}", json={"manual": {hs: {"value": "Built to\nlast years"}}}))
-        run = ok(client.post(f"/api/batches/{m['batch']['id']}/submit", json={"idempotency_key": "ui-run"}))
-        S.drain()
-        cls.ids = {"template": base["id"], "copy": cls.copy["id"], "batch": m["batch"]["id"], "run": run["run_id"]}
         port = _free_port()
         cls.base = f"http://127.0.0.1:{port}"
-        cls.server = uvicorn.Server(uvicorn.Config(S.create_app(), host="127.0.0.1", port=port, log_level="warning"))
+        app = S.create_app()
+        cls.server = uvicorn.Server(uvicorn.Config(wrap(app) if wrap else app, host="127.0.0.1", port=port, log_level="warning"))
         threading.Thread(target=cls.server.run, daemon=True).start()
         t = time.time()
         while not cls.server.started:
@@ -82,11 +75,6 @@ class T28Browser(unittest.TestCase):
         cls.pw.stop()
         cls.server.should_exit = True
 
-    def pages(self):
-        i = self.ids
-        return ["/templates", "/templates/new", f"/templates/new?id={i['template']}", f"/templates/{i['template']}", f"/templates/{i['copy']}",
-                f"/templates/{i['copy']}/edit", "/generate", f"/generate?batch={i['batch']}", "/runs", f"/runs/{i['run']}", "/settings"]
-
     def open(self, width):
         page = self.browser.new_page(viewport={"width": width, "height": 900})
         errors = []
@@ -97,6 +85,29 @@ class T28Browser(unittest.TestCase):
     def settle(self, page):
         page.wait_for_load_state("networkidle")
         page.wait_for_timeout(300)
+
+
+@unittest.skipUnless(REQUIRE or (DIST / "index.html").exists(), "the web app is not built (npm run build in dashboard/web)")
+class T28Browser(_Browser):
+    @classmethod
+    def setUpClass(cls):
+        base = S.base_template()
+        cls.copy = S.copy_of(base["id"], "UI probe copy")
+        p = S.product("UI chair", (120, 140, 100))
+        m = ok(client.post("/api/batches", json={"name": "UI batch", "template_versions": [{"version_id": base["version"]["id"]}],
+                                                 "product_ids": [p["id"]]}))
+        pr = m["pairs"][0]
+        hs = next(s for s in pr["slots"] if s["role"] == "headline")["slot_id"]
+        ok(client.patch(f"/api/batches/{m['batch']['id']}/pairs/{pr['pair_id']}", json={"manual": {hs: {"value": "Built to\nlast years"}}}))
+        run = ok(client.post(f"/api/batches/{m['batch']['id']}/submit", json={"idempotency_key": "ui-run"}))
+        S.drain()
+        cls.ids = {"template": base["id"], "copy": cls.copy["id"], "batch": m["batch"]["id"], "run": run["run_id"]}
+        cls.start()
+
+    def pages(self):
+        i = self.ids
+        return ["/templates", "/templates/new", f"/templates/new?id={i['template']}", f"/templates/{i['template']}", f"/templates/{i['copy']}",
+                f"/templates/{i['copy']}/edit", "/generate", f"/generate?batch={i['batch']}", "/runs", f"/runs/{i['run']}", "/settings"]
 
     def test_pages_fit_have_named_controls_and_no_errors(self):
         report, problems = {}, []
@@ -162,6 +173,191 @@ class T28Browser(unittest.TestCase):
         page.close()
         self.assertFalse(errors + errors2, (errors + errors2)[:10])
         S.record("T28.keyboard", {"skip_link": True, "desktop_nav": "/generate", "phone_menu": "/runs"})
+
+
+def _slow_marked_writes(app):
+    """Hold any write whose body contains SLOW_MARK on the server for 3 s while other requests proceed (the server
+    handles requests concurrently), so a client that sends a later write before the earlier one is answered loses it."""
+    async def wrapped(scope, receive, send):
+        if scope["type"] != "http" or scope["method"] not in ("PATCH", "POST"):
+            return await app(scope, receive, send)
+        msgs, more = [], True
+        while more:
+            m = await receive()
+            msgs.append(m)
+            more = m.get("more_body", False)
+        if SLOW_MARK.encode() in b"".join(m.get("body", b"") for m in msgs):
+            await asyncio.sleep(3)
+        it = iter(msgs)
+
+        async def replay():
+            return next(it, None) or await receive()
+        return await app(scope, replay, send)
+    return wrapped
+
+
+SLOW_MARK = "Slow first"
+
+
+@unittest.skipUnless(REQUIRE or (DIST / "index.html").exists(), "the web app is not built (npm run build in dashboard/web)")
+class ComposerWrites(_Browser):
+    """Audit D1 and D2 in the browser: what is generated is exactly what was on screen, and a submission whose answer
+    was lost is recovered instead of repeated."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tpl = S.base_template()
+        cls.product = S.product("Composer chair", (120, 140, 100))
+        cls.start(_slow_marked_writes)
+
+    def fresh_batch(self, name):
+        m = ok(client.post("/api/batches", json={"name": name, "template_versions": [{"version_id": self.tpl["version"]["id"]}],
+                                                 "product_ids": [self.product["id"]]}))
+        pr = m["pairs"][0]
+        hs = next(s for s in pr["slots"] if s["role"] == "headline")["slot_id"]
+        ok(client.patch(f"/api/batches/{m['batch']['id']}/pairs/{pr['pair_id']}", json={"manual": {hs: {"value": "Saved\nheadline"}}}))
+        return m["batch"]["id"], pr["pair_id"]
+
+    def slot_value(self, bid, role):
+        pr = ok(client.get(f"/api/batches/{bid}"))["pairs"][0]
+        return next(s for s in pr["slots"] if s["role"] == role)["value"]
+
+    def runs_of(self, bid):
+        return [r["id"] for r in S.db.all_(S.db.connect(), "SELECT id FROM runs WHERE batch_id = ? ORDER BY created_at", (bid,))]
+
+    def cancel_runs(self, bid):  # these runs only prove what was frozen; nothing needs rendering
+        for rid in self.runs_of(bid):
+            for o in ok(client.get(f"/api/runs/{rid}"))["outputs"]:
+                if o["status"] == "queued":
+                    ok(client.post(f"/api/outputs/{o['id']}/cancel"))
+
+    def compose(self, bid):
+        page, errors = self.open(1280)
+        page.goto(f"{self.base}/generate?batch={bid}")
+        page.wait_for_selector('textarea[aria-label="headline copy"]')
+        self.settle(page)
+        return page, errors
+
+    def generate_button(self, page):
+        return page.get_by_role("button", name=re.compile(r"^Generate \d+ output")).first
+
+    def saved(self, page, timeout=15000):
+        page.wait_for_selector("text=all changes saved", timeout=timeout)
+
+    def test_generate_freezes_what_was_typed_even_before_it_was_saved(self):
+        bid, _ = self.fresh_batch("type then generate")
+        page, errors = self.compose(bid)
+        typed = f"{SLOW_MARK}, typed\nbefore Generate"
+        page.fill('textarea[aria-label="headline copy"]', typed)
+        self.generate_button(page).click()  # within the 900 ms save delay; the server then takes 3 s to store the save
+        page.wait_for_url("**/runs/*", timeout=30000)
+        rid = page.url.rstrip("/").split("/")[-1]
+        o = ok(client.get(f"/api/runs/{rid}"))["outputs"][0]
+        frozen = next(s for s in o["inputs"]["slots"] if s["role"] == "headline")["value"]
+        self.assertEqual(frozen, typed, "the run froze the copy that was on screen")
+        self.cancel_runs(bid)
+        page.close()
+        self.assertFalse(errors, errors[:5])
+        S.record("D1.type_then_generate", {"frozen": frozen})
+
+    def test_leave_empty_inside_the_save_delay_stays_empty(self):
+        bid, _ = self.fresh_batch("leave empty")
+        page, errors = self.compose(bid)
+        kicker = page.locator(".slot-field", has=page.locator('textarea[aria-label="kicker copy"]'))
+        page.fill('textarea[aria-label="kicker copy"]', "Temporary kicker")
+        kicker.get_by_role("button", name="Leave empty").click()
+        page.wait_for_timeout(2500)  # well past the 900 ms delay of the typed edit
+        self.saved(page)
+        self.assertEqual(self.slot_value(bid, "kicker"), "", "the explicit choice wins over the earlier typing")
+        self.assertEqual(page.input_value('textarea[aria-label="kicker copy"]'), "")
+        page.close()
+        self.assertFalse(errors, errors[:5])
+        S.record("D1.leave_empty", {"server": "", "screen": ""})
+
+    def test_a_slow_earlier_save_cannot_overwrite_a_later_one(self):
+        bid, _ = self.fresh_batch("out of order")
+        page, errors = self.compose(bid)
+        sent = []
+        page.on("request", lambda r: sent.append(r.post_data) if r.method == "PATCH" and "/pairs/" in r.url else None)
+        page.fill('textarea[aria-label="headline copy"]', f"{SLOW_MARK}\nversion")
+        page.wait_for_timeout(1500)  # its save has been sent; the server holds it for 3 s
+        page.fill('textarea[aria-label="headline copy"]', "Second\nversion")
+        self.saved(page, 20000)
+        self.assertEqual(self.slot_value(bid, "headline"), "Second\nversion")
+        self.assertEqual(page.input_value('textarea[aria-label="headline copy"]'), "Second\nversion")
+        self.assertTrue(sent and "Second" in sent[-1], "the later value is the last one sent")
+        page.close()
+        self.assertFalse(errors, errors[:5])
+        self.assertTrue(any(SLOW_MARK in (b or "") for b in sent), "the slow save was sent first")
+        S.record("D1.out_of_order", {"server": "Second", "patches_sent": len(sent)})
+
+    def test_a_failed_save_blocks_generation_and_survives_a_reload(self):
+        bid, pid = self.fresh_batch("failed save")
+        page, errors = self.compose(bid)
+        submits = []
+        page.on("request", lambda r: submits.append(r.url) if r.url.endswith("/submit") else None)
+        page.route(re.compile(r".*/api/batches/[^/]+/pairs/[^/]+$"), lambda route: route.abort("failed") if route.request.method == "PATCH" else route.continue_())
+        page.fill('textarea[aria-label="headline copy"]', "Kept in\nthis browser")
+        page.wait_for_selector("text=change(s) not saved", timeout=15000)
+        self.generate_button(page).click()
+        page.wait_for_selector("text=Generating stopped", timeout=15000)
+        self.assertIn("/generate", page.url)
+        self.assertEqual(submits, [], "nothing was submitted from content the server never received")
+        self.assertEqual(self.slot_value(bid, "headline"), "Saved\nheadline")
+        page.unroute(re.compile(r".*/api/batches/[^/]+/pairs/[^/]+$"))
+        page.reload()
+        page.wait_for_selector('textarea[aria-label="headline copy"]')
+        self.assertEqual(page.input_value('textarea[aria-label="headline copy"]'), "Kept in\nthis browser", "restored after the reload")
+        self.saved(page)
+        self.assertEqual(self.slot_value(bid, "headline"), "Kept in\nthis browser", "and saved once the server is reachable")
+        keys = page.evaluate("Object.keys(localStorage).filter((k) => k.startsWith('dna.unsent.'))")
+        self.assertEqual(keys, [], "the kept copy is removed only after the server acknowledged it")
+        page.close()
+        errors = [e for e in errors if "Failed to load resource" not in e and "ERR_FAILED" not in e]
+        self.assertFalse(errors, errors[:5])
+        S.record("D1.failed_save", {"submit_blocked": True, "restored_after_reload": True, "saved_after_reload": True})
+
+    def test_a_lost_submit_response_is_recovered_not_repeated(self):
+        bid, _ = self.fresh_batch("lost response")
+        page, errors = self.compose(bid)
+        submit_re = re.compile(r".*/api/batches/[^/]+/submit$")
+
+        def lose_answer(route):
+            route.fetch()  # the server receives it and creates the run ...
+            route.abort("failed")  # ... and the browser never hears back
+
+        page.route(submit_re, lose_answer)
+        self.generate_button(page).click()
+        page.wait_for_selector("text=could not be confirmed", timeout=30000)
+        self.assertEqual(len(self.runs_of(bid)), 1)
+        key = page.evaluate(f"localStorage.getItem('dna.submit.{bid}')")
+        self.assertTrue(key, "the submission's identity is kept while its outcome is unknown")
+        page.unroute(submit_re)
+        self.generate_button(page).click()  # the user tries again
+        page.wait_for_url("**/runs/*", timeout=30000)
+        first = self.runs_of(bid)
+        self.assertEqual(len(first), 1, "the retry returned the same run")
+        self.assertTrue(page.url.endswith(first[0]))
+        page.goto(f"{self.base}/generate?batch={bid}")
+        page.wait_for_selector('textarea[aria-label="headline copy"]')
+        page.route(submit_re, lose_answer)
+        self.generate_button(page).click()
+        page.wait_for_selector("text=could not be confirmed", timeout=30000)
+        page.unroute(submit_re)
+        runs = self.runs_of(bid)
+        self.assertEqual(len(runs), 2, "a new click on Generate is a new run")
+        page.reload()  # the page comes back without knowing what happened
+        page.wait_for_selector("text=Your last submission was received", timeout=15000)
+        self.assertEqual(page.get_attribute("a:has-text('Open that run')", "href"), f"/runs/{runs[1]}")
+        self.assertIsNone(page.evaluate(f"localStorage.getItem('dna.submit.{bid}')"))
+        self.generate_button(page).click()  # explicitly generating again
+        page.wait_for_url("**/runs/*", timeout=30000)
+        self.assertEqual(len(self.runs_of(bid)), 3)
+        self.cancel_runs(bid)
+        page.close()
+        errors = [e for e in errors if "Failed to load resource" not in e and "ERR_FAILED" not in e]
+        self.assertFalse(errors, errors[:5])
+        S.record("D2.browser", {"lost_then_retried": "same run", "lost_then_reloaded": "recovered and shown", "new_generate": "new run"})
 
 
 if __name__ == "__main__":

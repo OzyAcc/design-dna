@@ -112,6 +112,22 @@ into a template library with batch generation.
 - A crashed demonstration's console line now says why the engine refused (the transaction's conflicts and every
   failing verification check), so a CI log explains it without downloading the evidence.
 
+### Fixed
+- Dashboard audit of 2026-10-07 (D1–D4; details in `docs/DASHBOARD-REPORT.md`):
+  - **Generate used content the server had not received.** Composer changes now go through one ordered write queue;
+    Generate, fit previews and AI drafting wait until every change is acknowledged and stop if one cannot be saved.
+    Typed copy stays in the browser until the server acknowledges it and is re-sent when the page comes back.
+  - **A failed submission could create a second run.** The submission key is kept until an answer arrives; the
+    same key with the same content returns the same run, with changed content it is refused
+    (`submission_changed`), and `GET /api/submissions/{key}` lets a reloaded page find the run it created.
+  - **Worker recovery could resend a paid request** that had been answered but not used. Provider results are now
+    stored in a checksummed checkpoint before use; a recovered job resumes from it, and any request without an
+    intact stored result goes to Needs review instead of being sent again.
+  - **Creative generation ignored the reviewed copy.** Each creative output now has a text policy chosen before
+    submitting: live text over generated artwork (default, engine-verified PNG + SVG), text drawn by the image
+    model (approval requires confirming it), or imagery only (disclosed). The renderer pin is checked before any
+    paid request whose result the engine must render.
+
 ## [2.0.0] — 2026-10-06
 
 A complete, reviewable package: portable templates, an enforced renderer pin, scoped edits that cannot drift, a

@@ -55,17 +55,23 @@ export function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+// State kept in this browser's storage. A change is written to storage at once (not when React next renders), so it
+// survives the page closing right after, and a change made after the component has gone (a late acknowledgement) still
+// reaches storage.
 export function useLocal<T>(key: string, initial: T): [T, (v: T | ((p: T) => T)) => void] {
   const [v, setV] = useState<T>(() => {
     try { const s = localStorage.getItem(key); return s ? (JSON.parse(s) as T) : initial; } catch { return initial; }
   });
+  const cur = useRef(v);
   const set = useCallback((x: T | ((p: T) => T)) => {
-    setV((prev) => {
-      const next = typeof x === "function" ? (x as (p: T) => T)(prev) : x;
-      try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* storage unavailable: state still works */ }
-      return next;
-    });
-  }, [key]);
+    const next = typeof x === "function" ? (x as (p: T) => T)(cur.current) : x;
+    cur.current = next;
+    try {
+      if (next === null && initial === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, JSON.stringify(next));
+    } catch { /* storage unavailable: state still works */ }
+    setV(next);
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   return [v, set];
 }
 

@@ -131,9 +131,10 @@ wins. A ChatGPT or Claude subscription is not an API key.
 | Asset intake | `intake.py`, `netfetch.py` | type/size/pixel limits, EXIF orientation, ICC → sRGB copy, original bytes and hash kept. Links are fetched server-side, and only public addresses are allowed: pinned DNS, every redirect re-checked, size and time limits. From a web page, only the images the page declares are offered |
 | Templates | `templates_svc.py`, `handlers/template_jobs.py` | a draft workspace per template. Rebuilds run in a staging copy, so an approved version is never overwritten. Each version is a sealed, validated `.dnab` bundle (read-only). Copies get a new identity, and the parent never changes. Restore adds a new version; history is never rewritten |
 | Scan | `scan_build.py`, `providers/anthropic_provider.py` | element boxes come from Claude's proposals (labelled as proposals) or from you. The engine's tools measure every value: colour, font candidates, text fit and geometry. Nothing is "complete" until you review it, and unknowns stay unknown |
-| Batches | `batches.py` | stable pair IDs per product × template version (× variant). Copy is resolved per output: template default → batch default → product override → pair override → your manual text. An empty string is a real value. AI drafts stay unapproved until you approve them |
-| Execution | `handlers/output_jobs.py` | editable adaptation is one engine transaction with `keep everything else`, verified against the approved baseline, then PNG + self-contained SVG with a round-trip check. Creative generation calls the image provider and is labelled generated. It claims no preservation or editability |
-| Jobs | `jobs.py`, `worker.py` | idempotent submission; per-template locks; leases with heartbeats. A dead worker's job is re-queued into a fresh store, unless a paid provider request was in flight: then it goes to **Needs review** and is never resent automatically |
+| Batches | `batches.py`, `web/src/writes.ts` | stable pair IDs per product × template version (× variant). Copy is resolved per output: template default → batch default → product override → pair override → your manual text. An empty string is a real value. AI drafts stay unapproved until you approve them. In the composer every change is sent in order, one at a time; **Generate**, **Check fit** and AI drafting first wait until the server has acknowledged every change, and stop if one could not be saved |
+| Submission | `batches.submit`, `GET /api/submissions/{key}` | one submission key is one run of one content: the key is stored in the browser before the request is sent and kept until the answer arrives, so a retry after a lost answer returns the same run; reusing a key after the content changed is refused (`submission_changed`); a page that comes back asks the server what its last key created |
+| Execution | `handlers/output_jobs.py` | editable adaptation is one engine transaction with `keep everything else`, verified against the approved baseline, then PNG + self-contained SVG with a round-trip check. Creative generation is labelled generated and claims no preservation for the generated imagery. Its text policy is chosen per output before submitting and frozen with it: **live text over the artwork** (default: text-free artwork, then the template's own text with this output's approved copy and its shapes rendered over it by the engine as one verified transaction, PNG + SVG), **text drawn by the image model** (the approved copy is requested verbatim; raster text that a person must confirm before approval) or **imagery only** (the copy is not used; shown before submitting). A template whose renderer pin no longer matches is refused before any paid request |
+| Jobs | `jobs.py`, `worker.py`, `providers/base.py` | per-template locks; leases with heartbeats. Every provider request is recorded before it is sent, and its result is written to a durable checkpoint (`jobs/<id>/checkpoints/`, hash recorded) before anything is built from it. A dead worker's job is re-queued into a fresh store only if every request it made has an intact stored result; the re-run uses the stored result and requests nothing again. A request that was in flight, answered but not stored, or whose stored result is damaged sends the job to **Needs review**; only an explicit, confirmed retry sends a new request. This prevents resending from this application; it cannot prove what a provider billed for a request whose outcome is unknown |
 | Exports | `exports.py`, `api/runs.py` | single files, ZIPs with `manifest.json` + `MANIFEST.txt` (copy, versions, checks, limitations), and `.dnab` template bundles |
 
 Data layout under `DNA_DATA_DIR`:
@@ -142,7 +143,7 @@ Data layout under `DNA_DATA_DIR`:
 - `blobs/`, `previews/` — intake
 - `templates/<id>/workspace` — the editable store
 - `templates/<id>/versions/v<n>-*.dnab` plus the extracted `v<n>/`
-- `jobs/<id>/home` — each job's private engine store
+- `jobs/<id>/home` — each job's private engine store; `jobs/<id>/checkpoints/` — stored provider results
 - `outputs/<id>/` — output files
 - `fonts/` — uploaded fonts
 - `secrets.json`
@@ -189,20 +190,27 @@ accent #2E5A44"), preview its scope, and apply it. Every edit is verified in the
 
 **7. Add products and control each output.** Select templates and products. Each product × template pair gets its
 own editor: copy per slot, mode (editable adaptation, creative generation, or a generated photo inside the
-template), language and instructions. **Check fit & preview** renders the pair before you submit. Copy that doesn't
-fit is refused with options; it is never clipped or shrunk silently.
+template), language and instructions. For creative generation, choose what happens to the copy: live text over the
+artwork, text drawn by the image model, or imagery only. **Check fit & preview** renders the pair before you submit
+(for live text over the artwork, with the template's own background). Copy that doesn't fit is refused with
+options; it is never clipped or shrunk silently. The line under the batch name says whether all changes are saved.
 
 ![Batch composer](../docs/images/dashboard/08-batch-composer.png)
 
-**8. Generate and review.** Submitting freezes each output's template version and inputs, so later template edits
-don't change queued or finished outputs. Results show each output's status and checks. Approve, retry with
-revised copy (as a new revision; the original is kept) or cancel.
+**8. Generate and review.** **Generate** first waits until every change you made is saved, then freezes each
+output's template version and inputs, so the run uses exactly what was on screen and later template edits don't
+change queued or finished outputs. If a change could not be saved, nothing is submitted and your text stays in the
+browser. If the answer to a submission is lost, **Generate** retries that same submission (it cannot create a
+second run), and a reloaded page shows the run it created. Results show each output's status and checks. Approve,
+retry with revised copy (as a new revision; the original is kept) or cancel. Text drawn by the image model is not
+checked automatically: approving it asks you to confirm it matches the approved copy.
 
 ![Results](../docs/images/dashboard/09-results.png)
 
 **9. Download and continue later.** Download single PNG/SVG files or a ZIP with a manifest. Export a template as a
-`.dnab` bundle and import it into any other workspace. Drafts, batches and unsent copy are saved, so you can close
-the tab and come back.
+`.dnab` bundle and import it into any other workspace. Drafts and batches are saved on the server. Copy you typed
+is kept in this browser until the server acknowledges it, and sent again when you come back, so closing the tab
+loses nothing.
 
 **Settings** shows what this installation can do right now: provider status, renderer, limits and the font library.
 
@@ -220,7 +228,8 @@ cd dashboard/tests
 python -m unittest -v test_intake test_templates test_batches test_execution test_ui
 ```
 
-The tests use the real engine, a real Chromium, a real worker process (killed mid-job for the recovery tests) and
-the **test-only mock providers**. The mock providers are never a production path, and live provider calls are not
+The tests use the real engine, a real Chromium, a real worker process (killed mid-job, or stopped at a test-only
+crash point, for the recovery tests) and the **test-only mock providers**. The crash points (`DNA_TEST_CRASH_AT`,
+see `server/dna_dashboard/faults.py`) do nothing unless `DNA_ENABLE_MOCK_PROVIDERS=1`. The mock providers are never a production path, and live provider calls are not
 part of the suite. `DNA_TEST_EVIDENCE=<dir>` keeps each scenario's key results in `results.jsonl`. CI:
 `.github/workflows/dashboard.yml`.

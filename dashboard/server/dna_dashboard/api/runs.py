@@ -90,6 +90,7 @@ def output_file(oid: str, index: int, download: int = 0, conn=Depends(get_conn))
 
 class ReviewReq(BaseModel):
     state: str
+    confirm_text: bool = False
 
 
 @router.post("/outputs/{oid}/review")
@@ -101,6 +102,10 @@ def review(oid: str, body: ReviewReq, conn=Depends(get_conn)):
         raise not_found("output", oid)
     if body.state == "approved" and o["status"] != "completed":
         raise conflict("only a completed output can be approved; refused or failed candidates stay review artifacts", "not_approvable")
+    text = (o.get("checks") or {}).get("text") or {}
+    if body.state == "approved" and text.get("policy") == "in_image" and not body.confirm_text:
+        raise conflict("the image model drew this output's text: confirm it matches the approved copy before approving", "confirm_text",
+                       requested=text.get("requested"))
     with db.tx(conn):
         db.update(conn, "outputs", oid, {"review_state": body.state, "updated_at": db.now()})
     return public_output(db.one(conn, "SELECT * FROM outputs WHERE id = ?", (oid,)))
@@ -127,10 +132,13 @@ def retry(oid: str, body: RetryReq, conn=Depends(get_conn)):
     if dup:
         x = db.one(conn, "SELECT id FROM outputs WHERE job_id = ?", (dup["id"],))
         return {"output_id": x["id"] if x else None, "duplicate": True}
-    unknown = db.all_(conn, "SELECT * FROM provider_requests WHERE job_id = ? AND status IN ('unknown', 'sending')", (o["job_id"],)) if o.get("job_id") else []
-    if unknown and not body.confirm_new_paid_request:
-        raise conflict("the previous attempt's provider request may have completed (and been billed). Confirm to send a new paid request.",
-                       "confirm_paid_retry", provider_requests=[{k: u[k] for k in ("id", "provider", "operation", "status", "request_id")} for u in unknown])
+    reqs = db.all_(conn, "SELECT * FROM provider_requests WHERE job_id = ?", (o["job_id"],)) if o.get("job_id") else []
+    # a request that may have been billed (outcome unknown, or answered) whose result this output did not deliver
+    paid = [u for u in reqs if u["status"] in ("unknown", "sending", "received") or (u["status"] == "stored" and o["status"] != "completed")]
+    if paid and not body.confirm_new_paid_request:
+        raise conflict("the previous attempt already reached the provider (its request may have been billed) and this output did not "
+                       "deliver its result. Confirm to send a new paid request.",
+                       "confirm_paid_retry", provider_requests=[{k: u[k] for k in ("id", "provider", "operation", "status", "request_id")} for u in paid])
     inputs = dict(o["inputs"])
     changed = []
     if body.copy_values:

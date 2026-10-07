@@ -4,9 +4,16 @@ Editable template adaptation: import the version bundle -> continue its design v
 (keep everything else) with the resolved copy, the product photo and hidden slots -> engine verification against the
 previous revision and the approved baseline -> PNG + SVG export with manifest and round trip. Only checks that ran and
 passed are reported as passed; a refused transaction stays a review artifact.
-Creative generation: a configured image provider makes a new image from the reference and the product photos. Its
-provenance is recorded; no preservation or editability claim is made. creative_slot places a generated product scene
-into the template's image slot and then runs the same engine adaptation and checks.
+Creative generation: a configured image provider makes a new image from the reference and the product photos, and
+the output's text policy (chosen and frozen before submission) decides what happens to the approved copy:
+  overlay  - the provider makes text-free artwork; the engine renders the template's own text (the approved copy) and
+             shapes over it as live layers, verifies the transaction and exports PNG + SVG
+  in_image - the provider is asked to draw the approved copy; raster text that a person confirms before approval
+  none     - imagery only (the copy is not used; disclosed before submission)
+creative_slot places a generated product scene into the template's image slot and runs the same engine checks.
+Every paid provider call goes through provider_call: its result is stored durably before anything is built from it,
+so a recovered job resumes from it instead of paying again. Before a paid result is handed to the engine, the
+template's renderer pin is checked, so a drifted template is refused before any request is made.
 """
 from __future__ import annotations
 
@@ -24,8 +31,9 @@ from .. import enginelib as el
 from .. import templates_svc as ts
 from ..engine import EngineError
 from ..errors import AppError
+from ..faults import crash_point
 from ..intake import canonical_file, get as get_asset
-from ..providers import for_capability, tracked
+from ..providers import for_capability, provider_call
 from ..providers.openai_provider import request_size
 from ..worker import handler
 
@@ -134,27 +142,37 @@ def generate(ctx):
         raise AppError("the frozen template version bundle changed on disk; refusing to generate", "bundle_mismatch", 500)
     odir = config.get().outputs / o["id"]
     odir.mkdir(parents=True, exist_ok=True)
-    if o["mode"] == "creative":
-        return _creative(ctx, o, v, odir)
+    policy = creative_policy(inputs) if o["mode"] == "creative" else None
+    if o["mode"] == "creative" and policy != "overlay":
+        return _creative_raster(ctx, o, v, odir, policy)
     variant, head = _import(ctx, v)
-    image_file, source, prov_meta = None, "supplied", None
-    if inputs.get("image") and inputs["image"].get("asset_id"):
-        if o["mode"] == "creative_slot":
-            image_file, prov_meta = _generated_slot_image(ctx, o, v)
-            source = "generated"
-        else:
-            image_file = _product_png(ctx, inputs["image"]["asset_id"])
-    ops = compile_ops(inputs, image_file, source, _font_path(inputs))
+    if o["mode"] in ("creative", "creative_slot"):  # the engine must render the paid result: check its pin before paying
+        refused = _refuse_on_drift(ctx, o, v, variant)
+        if refused:
+            return refused
+    image_file, source, prov_meta, artwork = None, "supplied", None, None
+    if o["mode"] == "creative":
+        artwork, prov_meta = _generated_artwork(ctx, o, v)
+        ops = compile_overlay_ops(inputs, ts.version_scene(v), artwork, _font_path(inputs))
+    else:
+        if inputs.get("image") and inputs["image"].get("asset_id"):
+            if o["mode"] == "creative_slot":
+                image_file, prov_meta = _generated_slot_image(ctx, o, v)
+                source = "generated"
+            else:
+                image_file = _product_png(ctx, inputs["image"]["asset_id"])
+        ops = compile_ops(inputs, image_file, source, _font_path(inputs))
     if not ops:
         raise AppError("nothing to change for this output", "no_ops")
     patch = {"schema_version": "1.0.0", "base_revision": head, "keep": "everything_else",
              "intent": f"output {o['id']}: {inputs['product']['name']} on {inputs['template']['name']} v{inputs['template']['number']} ({inputs['language']})",
              "ops": ops}
-    ctx.stage("transaction", "applying the copy and product image as one verified transaction in the pinned renderer")
+    ctx.stage("transaction", "applying the copy and " + ("the generated artwork" if artwork else "product image")
+              + " as one verified transaction in the pinned renderer")
     try:
         txn = engine.call("transact", {"engine_id": v["engine_id"], "variant": variant, "patch": patch}, ctx.home, cancel=ctx.cancelled)
     except EngineError as e:
-        return _refused(ctx, o, odir, e, prov_meta)
+        return _refused(ctx, o, odir, e, prov_meta, keep=[(artwork, "generated-artwork.png")] if artwork else ())
     ctx.stage("export", "exporting PNG and self-contained SVG, then rendering the SVG to check it")
     exp = engine.call("export", {"engine_id": v["engine_id"], "variant": variant, "formats": ["png", "svg"]}, ctx.home, cancel=ctx.cancelled)
     ctx.stage("collect", "storing files and the check report")
@@ -184,9 +202,22 @@ def generate(ctx):
     if base and Path(base).exists():
         shutil.copyfile(base, ev / "before.png")
         files.append(_file(ev / "before.png", "evidence", "evidence/before.png"))
+    if artwork:
+        shutil.copyfile(artwork, ev / "generated-artwork.png")
+        files.append(_file(ev / "generated-artwork.png", "evidence", "evidence/generated-artwork.png"))
     checks = summarize_checks(txn, exp)
     lim = list(dict.fromkeys(inputs.get("warnings", []) + ts.version(ctx.conn, o["template_version_id"])["summary"]["eligibility"]["adapt"]["limitations"]))
-    if prov_meta:
+    if artwork:
+        checks["path"] = "creative_overlay"
+        checks["text"] = {"policy": "overlay", "live_text": {e["role"]: e["value"] for e in inputs["slots"] if e["value"] and not e["hidden"]},
+                          "verified": "rendered by the engine from the approved copy as live text (see the SVG and its manifest)"}
+        checks["artwork"] = {"generated": True, "preservation": "not_applicable: the background artwork is new", "provider": prov_meta.get("provider"),
+                             "requested_size": prov_meta.get("size_requested")}
+        lim = ["the background artwork is generated: no pixel preservation is claimed for it",
+               "AI resemblance is not proof of the product's identity: compare it with the product photo"] + lim
+        if prov_meta.get("mock"):
+            lim.insert(0, "MOCK PROVIDER (test only): this is not a real generation")
+    elif prov_meta:
         lim.append("the product scene in the image slot was generated by an AI provider; resemblance is not proof of product identity")
     if checks["verification_status"] == "pass_with_unknowns":
         lim.append("some requested edits have no pixel probe (reported as unknown, not passed)")
@@ -195,15 +226,23 @@ def generate(ctx):
                                           "transaction": f"variants/{variant}/transactions/txn-{txn['revision']:04d}.json"},
             "template_bundle_sha256": v["bundle_sha256"], "product_image": inputs.get("image"),
             "generated": prov_meta}
+    if artwork:
+        prov.update(kind="generated", text_policy="overlay", prompt=prov_meta.get("prompt"), mock=bool(prov_meta.get("mock")))
+    crash_point("after_artifact")
     _set_output(ctx.conn, o["id"], status=status, files=files, checks=checks, limitations=lim, provenance=prov, error=None)
     return status, {"output_id": o["id"], "files": [f["name"] for f in files], "verification": checks["verification_status"]}
 
 
-def _refused(ctx, o, odir, e: EngineError, prov_meta):
-    """A refused transaction is a review artifact with the engine's conflicts and options, never a final output."""
+def _refused(ctx, o, odir, e: EngineError, prov_meta, keep=()):
+    """A refused transaction is a review artifact with the engine's conflicts and options, never a final output.
+    `keep` lists inputs worth keeping beside it (a paid, generated image is never thrown away)."""
     txn = e.detail or {}
     conflicts = txn.get("conflicts") or [e.engine]
     files = []
+    for src, name in keep:
+        (odir / "refused").mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, odir / "refused" / name)
+        files.append(_file(odir / "refused" / name, "evidence", f"refused/{name}"))
     v = txn.get("verification") or {}
     cand = (v.get("renders") or {}).get("candidate")
     ev = odir / "refused"
@@ -254,7 +293,16 @@ def _template_passport(v) -> dict:
     return el.read_json(ts.version_dir(v) / "passport.json")
 
 
-def build_prompt(inputs, passport, purpose="artwork", include_text=False) -> str:
+def creative_policy(inputs) -> str:
+    """The frozen text policy of a creative output. Outputs submitted before policies existed asked for no text."""
+    return inputs.get("creative_text") or "none"
+
+
+def _copy(inputs) -> list[dict]:
+    return [e for e in inputs["slots"] if e.get("value") and not e.get("hidden") and not e.get("unused")]
+
+
+def build_prompt(inputs, passport, purpose="artwork", text_policy="none", keep_clear=None) -> str:
     val = lambda k: (passport.get(k) or {}).get("value") if isinstance(passport.get(k), dict) else None
     style = "; ".join(f"{k}: {val(k)}" for k in ("character", "theme", "mechanism") if val(k))
     prod = inputs["product"]
@@ -273,15 +321,72 @@ def build_prompt(inputs, passport, purpose="artwork", include_text=False) -> str
     if inputs.get("instructions"):
         lines.append("Instructions: " + " / ".join(inputs["instructions"]))
     lines.append("Keep the product's shape, colour, material and identifying details exactly as in the product photo.")
-    if include_text:
-        txt = [e["value"] for e in inputs["slots"] if e.get("value") and not e.get("hidden")]
-        lines.append("Include exactly this text and no other: " + " | ".join(txt))
+    if text_policy == "in_image":
+        txt = "; ".join(f'{e["role"]}: "{e["value"].replace(chr(10), " / ")}"' for e in _copy(inputs))
+        lines.append("Include exactly this text, spelled exactly as written (\" / \" marks a line break), and no other text, "
+                     f"letters, logos or watermarks: {txt}.")
     else:
         lines.append("Do not add any text, letters, numbers, logos, watermarks or brand names.")
+    if keep_clear:
+        lines.append("Keep these areas calm and free of important detail, because the design's own text and shapes will be drawn "
+                     "over them: " + "; ".join(keep_clear) + ".")
     return "\n".join(lines)
 
 
-def _creative(ctx, o, v, odir):
+def _keep_clear(inputs, scene) -> list[str]:
+    """The regions the overlay will draw over (approved text and the template's shapes), as canvas percentages."""
+    W, H = float(scene["canvas"]["width"]), float(scene["canvas"]["height"])
+    text_nodes = {e["node"]: e["role"] for e in _copy(inputs)}
+    out = []
+    for n in scene["nodes"]:
+        g = n.get("geometry")
+        if not g or not n.get("visible", True) or not (n["id"] in text_nodes or n["type"] in ("shape", "path")):
+            continue
+        name = text_nodes.get(n["id"]) or n.get("alias") or n.get("role") or "shape"
+        out.append(f"{name} (left {g['x'] / W:.0%}, top {g['y'] / H:.0%}, {g['w'] / W:.0%} wide, {g['h'] / H:.0%} tall)")
+    return out
+
+
+def compile_overlay_ops(inputs, scene, artwork=None, font_path=None) -> list[dict]:
+    """Finished artwork with live text: the approved copy into the template's text slots, every image layer hidden (the
+    generated artwork replaces the photos), and the background layer replaced by the generated artwork. Without
+    `artwork` (a fit preview before submission) the template's own background stays."""
+    ops = compile_ops(inputs, None, "supplied", font_path)
+    hidden = {o["path"].rsplit(".", 1)[0] for o in ops if o["op"] == "set" and o["path"].endswith(".visible")}
+    ops += [{"op": "set", "path": f"{n['id']}.visible", "value": False} for n in scene["nodes"]
+            if n["type"] == "image" and n.get("visible", True) and n["id"] not in hidden]
+    if artwork:
+        bg = next(n["id"] for n in scene["nodes"] if n["type"] == "background")
+        ops.append({"op": "replace", "node": bg, "file": str(artwork), "source": "generated"})
+    return ops
+
+
+def _refuse_on_drift(ctx, o, v, variant):
+    """Refuse before any paid request if the engine could not render the paid result under the template's pin."""
+    ctx.stage("pin", "checking the template's pinned renderer before any paid request")
+    d = engine.call("pin_check", {"engine_id": v["engine_id"], "variant": variant}, ctx.home, cancel=ctx.cancelled)
+    if not d.get("hard"):
+        return None
+    err = {"kind": "renderer_drift", "message": "the renderer differs from this template's pinned baseline, so the result could not be "
+                                                "checked; nothing was requested from the image provider. Preview and confirm a renderer "
+                                                "migration on the template page, then retry",
+           "conflicts": [{"code": "renderer_drift", "hard": d["hard"], "pinned_at": d.get("pinned_at")}]}
+    _set_output(ctx.conn, o["id"], status="needs_review", files=[], error=err,
+                checks={"path": o["mode"], "verification_status": "not_run", "renderer": {"status": "drift"}},
+                provenance={"path": o["mode"], "generated": None}, limitations=["refused before generation: renderer drift (no paid request)"])
+    return "needs_review", {"output_id": o["id"], "refused": True, "before_provider": True}
+
+
+def _generate_image(ctx, o, prov, imgs, prompt, size, call_key):
+    """One paid image request for this output, made at most once (resumed from its stored result after a crash)."""
+    png, meta = provider_call(ctx.job["id"], call_key, prov.name, "image_generation", getattr(prov, "model", None),
+                              lambda tr: prov.generate(imgs, prompt, size, tr), "bytes")
+    if meta.get("resumed_from_checkpoint"):
+        ctx.log(f"resumed from the stored provider result {meta['resumed_from_checkpoint']}: nothing was requested again")
+    return png, meta
+
+
+def _artwork_request(ctx, o, v):
     inputs = o["inputs"]
     prov = for_capability("image_generation", ctx.input.get("provider"))
     ref = (ts.version_dir(v) / "source" / "canonical.png").read_bytes()
@@ -290,11 +395,33 @@ def _creative(ctx, o, v, odir):
         if aid:
             imgs.append((f"product-{i}.png", _product_png(ctx, aid, f"product{i}").read_bytes(), "image/png"))
     W, H = int(inputs["template"]["canvas"]["width"]), int(inputs["template"]["canvas"]["height"])
-    size = request_size(W, H)
-    prompt = build_prompt(inputs, _template_passport(v), "artwork", bool(ctx.input.get("include_text")))
+    return prov, imgs, (W, H), request_size(W, H)
+
+
+def _generated_artwork(ctx, o, v):
+    """overlay: text-free artwork for the whole canvas, leaving the regions the design draws over calm."""
+    inputs = o["inputs"]
+    prov, imgs, _, size = _artwork_request(ctx, o, v)
+    prompt = build_prompt(inputs, _template_passport(v), "artwork", "overlay", _keep_clear(inputs, ts.version_scene(v)))
+    ctx.stage("provider", f"requesting text-free artwork from {prov.label} (a paid request); the approved copy is added as live text")
+    png_bytes, meta = _generate_image(ctx, o, prov, imgs, prompt, size, f"creative:{o['id']}")
+    f = ctx.dir / "inputs" / "generated-artwork.png"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    with Image.open(io.BytesIO(png_bytes)) as im:
+        im.convert("RGB").save(f, "PNG")
+        rw, rh = im.size
+    meta = dict(meta, prompt=prompt, sha256=hashlib.sha256(f.read_bytes()).hexdigest(), returned=[rw, rh],
+                inputs=[{"role": "reference", "sha256": v["bundle_sha256"]}] + [{"role": n, "sha256": hashlib.sha256(b).hexdigest()} for n, b, _ in imgs[1:]])
+    return f, meta
+
+
+def _creative_raster(ctx, o, v, odir, policy):
+    """in_image or none: the provider's image is the output."""
+    inputs = o["inputs"]
+    prov, imgs, (W, H), size = _artwork_request(ctx, o, v)
+    prompt = build_prompt(inputs, _template_passport(v), "artwork", policy)
     ctx.stage("provider", f"requesting a creative image from {prov.label} (a paid request)")
-    with tracked(prov.name, "image_generation", getattr(prov, "model", None), ctx.job["id"]) as tr:
-        png_bytes, meta = prov.generate(imgs, prompt, size, tr)
+    png_bytes, meta = _generate_image(ctx, o, prov, imgs, prompt, size, f"creative:{o['id']}")
     ctx.stage("collect", "storing the generated image and its provenance")
     path = odir / out_name(inputs, o["revision"], "png")
     with Image.open(io.BytesIO(png_bytes)) as im:
@@ -305,15 +432,24 @@ def _creative(ctx, o, v, odir):
               "preservation": "not_applicable: a new image, not an adaptation of the template model",
               "editability": "none: a single raster image", "comparison": "not run (no deterministic baseline applies)"}
     lim = ["creative result: layout, typography and colours are not verified against the template",
-           "AI resemblance is not proof of the product's identity: compare it with the product photo",
-           "text in the image was not requested" if not ctx.input.get("include_text") else "text inside the image is not live or editable"]
+           "AI resemblance is not proof of the product's identity: compare it with the product photo"]
+    if policy == "in_image":
+        requested = {e["role"]: e["value"] for e in _copy(inputs)}
+        checks["text"] = {"policy": "in_image", "requested": requested,
+                          "verified": "not checked automatically (no OCR): confirm it matches the approved copy before approving"}
+        lim.append("the text was drawn by the image model: it is not live or editable and may be misspelled; confirm it matches "
+                   "the approved copy before approving")
+    else:
+        checks["text"] = {"policy": "none", "note": "imagery only, chosen before submission: the copy was not used"}
+        lim.append("imagery only (chosen before submission): no text was requested and the copy fields were not used")
     if [rw, rh] != [W, H]:
         lim.append(f"returned at {rw}x{rh}; the template is {W}x{H} (no resampling was applied)")
-    provenance = {"path": "creative", "kind": "generated", "provider": meta, "prompt": prompt,
+    provenance = {"path": "creative", "kind": "generated", "text_policy": policy, "provider": meta, "prompt": prompt,
                   "inputs": [{"role": "reference", "sha256": v["bundle_sha256"]}] + [{"role": n, "sha256": hashlib.sha256(b).hexdigest()} for n, b, _ in imgs[1:]],
                   "mock": bool(meta.get("mock"))}
     if meta.get("mock"):
         lim.insert(0, "MOCK PROVIDER (test only): this is not a real generation")
+    crash_point("after_artifact")
     _set_output(ctx.conn, o["id"], status="completed", files=files, checks=checks, limitations=lim, provenance=provenance, error=None)
     return "completed", {"output_id": o["id"], "provider": meta.get("provider"), "request_id": meta.get("request_id")}
 
@@ -321,15 +457,14 @@ def _creative(ctx, o, v, odir):
 def _generated_slot_image(ctx, o, v):
     inputs = o["inputs"]
     prov = for_capability("image_generation", ctx.input.get("provider"))
-    node = next(n for n in el.read_json(ts.version_dir(v) / "scene.json")["nodes"] if n["id"] == inputs["image"]["node"])
+    node = next(n for n in ts.version_scene(v)["nodes"] if n["id"] == inputs["image"]["node"])
     g = node["geometry"]
     size = request_size(int(g["w"]), int(g["h"]))
     imgs = [("reference.png", (ts.version_dir(v) / "source" / "canonical.png").read_bytes(), "image/png"),
             ("product.png", _product_png(ctx, inputs["product"]["primary_asset_id"]).read_bytes(), "image/png")]
     prompt = build_prompt(inputs, _template_passport(v), "slot")
     ctx.stage("provider", f"requesting slot imagery from {prov.label} (a paid request)")
-    with tracked(prov.name, "image_generation", getattr(prov, "model", None), ctx.job["id"]) as tr:
-        png_bytes, meta = prov.generate(imgs, prompt, size, tr)
+    png_bytes, meta = _generate_image(ctx, o, prov, imgs, prompt, size, f"slot:{o['id']}")
     f = ctx.dir / "inputs" / "generated-slot.png"
     f.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(io.BytesIO(png_bytes)) as im:
@@ -345,9 +480,16 @@ def preview(ctx):
     p = batches.get_pair(ctx.conn, b["id"], ctx.input["pair_id"])
     r = batches.resolve(ctx.conn, b, p)
     v = ts.version(ctx.conn, p["template_version_id"])
+    if r["mode"] == "creative" and r.get("creative_text") != "overlay":
+        raise AppError("this output's text is not rendered by the template (text drawn by the image model, or imagery only): "
+                       "there is no fit to check", "no_preview")
     variant, _ = _import(ctx, v)
-    image_file = _product_png(ctx, r["image"]["asset_id"]) if r.get("image") and r["image"].get("asset_id") else None
-    ops = compile_ops(r, image_file, "supplied", _font_path(r) if r["language"] == "ar" and r.get("arabic_font") else None)
+    font = _font_path(r) if r["language"] == "ar" and r.get("arabic_font") else None
+    if r["mode"] == "creative":  # live text over artwork: check the copy fits; the artwork is only made at submission
+        ops = compile_overlay_ops(r, ts.version_scene(v), None, font)
+    else:
+        image_file = _product_png(ctx, r["image"]["asset_id"]) if r.get("image") and r["image"].get("asset_id") else None
+        ops = compile_ops(r, image_file, "supplied", font)
     out = ctx.dir / "preview"
     ctx.stage("render", "rendering the preview in the pinned renderer (nothing is committed)")
     prev = {"inputs_hash": r["inputs_hash"], "at": db.now(), "mode": r["mode"]}
@@ -396,8 +538,8 @@ def draft_copy(ctx):
         raise AppError("no editable text slots to draft", "nothing_to_draft")
     prov = for_capability("copy", ctx.input.get("provider"))
     ctx.stage("provider", f"asking {prov.label} for copy drafts (a paid request)")
-    with tracked(prov.name, "copy", getattr(prov, "copy_model", None), ctx.job["id"]) as tr:
-        data, meta = prov.draft_copy(req, tr)
+    data, meta = provider_call(ctx.job["id"], "copy", prov.name, "copy", getattr(prov, "copy_model", None),
+                               lambda tr: prov.draft_copy(req, tr), "json")
     n = 0
     with db.tx(ctx.conn):
         for pid in targets:
