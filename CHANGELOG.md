@@ -64,6 +64,8 @@ the acceptance suite runs off Windows (the first open item of the audit response
   font folders.
 - T01 also checks the CTA's horizontal position (within 1 px, like the label and headline), and a failed
   `editable_close` verdict now reports each failed region's SSIM, the fitted text parameters and the renderer.
+- A crashed demonstration's console line now says why the engine refused (the transaction's conflicts and every
+  failing verification check), so a CI log explains it without downloading the evidence.
 
 ## [2.0.0] — 2026-10-06
 

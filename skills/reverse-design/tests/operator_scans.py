@@ -24,6 +24,7 @@ from inspect_source import create_template  # noqa: E402
 from render_static import render  # noqa: E402
 from validate_model import editability_report  # noqa: E402
 
+import crash  # noqa: E402
 import fontset  # noqa: E402
 
 SANS = fontset.paths("sans_candidates")
@@ -380,4 +381,4 @@ def run(root, fx, ref, record, want):
             except Exception as e:
                 import traceback
 
-                record(n, f"crashed: T{n:02d}", {"ran without crashing": f"{e.__class__.__name__}: {e}"}, notes=traceback.format_exc()[-1500:])
+                record(n, f"crashed: T{n:02d}", {"ran without crashing": crash.reason(e)}, notes=traceback.format_exc()[-1500:])

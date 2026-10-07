@@ -34,6 +34,7 @@ from verify_change import render_cached  # noqa: E402
 from common import DnaError, import_asset, read_json, sha256_file, template_dir, write_json  # noqa: E402
 from compare_render import compare, decode, pixel_metrics  # noqa: E402
 from editorial_gt import build_gt  # noqa: E402
+import crash  # noqa: E402
 import fontset  # noqa: E402
 from report import write_report  # noqa: E402
 from inspect_source import create_template  # noqa: E402
@@ -467,13 +468,13 @@ def main() -> int:
             if n == 4:
                 t4 = res
         except Exception as e:  # a crash is a failed demonstration, recorded with its traceback
-            record(n, f"crashed: {fn.__name__ if hasattr(fn, '__name__') else n}", {"ran without crashing": f"{e.__class__.__name__}: {e}"},
+            record(n, f"crashed: {fn.__name__ if hasattr(fn, '__name__') else n}", {"ran without crashing": crash.reason(e)},
                    notes=traceback.format_exc()[-1500:])
     if want(11) and t4:
         try:
             t11_undo_reload(*t4)
         except Exception as e:
-            record(11, "crashed: undo/reload", {"ran without crashing": f"{e.__class__.__name__}: {e}"}, notes=traceback.format_exc()[-1500:])
+            record(11, "crashed: undo/reload", {"ran without crashing": crash.reason(e)}, notes=traceback.format_exc()[-1500:])
     if want(1) or want(2):
         import operator_scans
 

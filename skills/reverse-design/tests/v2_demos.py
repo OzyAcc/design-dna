@@ -14,6 +14,7 @@ import traceback
 from pathlib import Path
 
 import dna
+import crash
 import fontset
 from apply_patch import load_variant, new_variant, transact
 from bundle import Library, export_bundle, import_bundle, validate_bundle
@@ -393,7 +394,7 @@ def run(root, fx, record, want, expect_error):
         try:
             fn(root, fx, record, expect_error)
         except Exception as e:  # a crash is a failed demonstration
-            record(n, f"crashed: T{n:02d}", {"ran without crashing": f"{e.__class__.__name__}: {e}"}, notes=traceback.format_exc()[-1500:])
+            record(n, f"crashed: T{n:02d}", {"ran without crashing": crash.reason(e)}, notes=traceback.format_exc()[-1500:])
     if want(23):
         record(23, "Host persistent storage (e.g. ChatGPT Work file store) as a bundle backend", {}, status="unverified",
                notes="Bundles + FilesystemBackend are implemented and tested (T20). A host file store needs an adapter with "

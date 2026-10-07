@@ -19,6 +19,7 @@ import numpy as np
 from PIL import Image
 
 import dna
+import crash
 import fontset
 from apply_patch import load_variant
 from common import DnaError, deep, import_asset, read_json, sha256_file, template_dir, write_json
@@ -278,4 +279,4 @@ def run(root, fx, record, want, expect_error):
         try:
             fn(root, fx, record, expect_error)
         except (Exception, DnaError) as e:
-            record(n, f"crashed: T{n:02d}", {"ran without crashing": f"{e.__class__.__name__}: {e}"}, notes=traceback.format_exc()[-1500:])
+            record(n, f"crashed: T{n:02d}", {"ran without crashing": crash.reason(e)}, notes=traceback.format_exc()[-1500:])
