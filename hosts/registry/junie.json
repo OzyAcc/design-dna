@@ -1,0 +1,75 @@
+{
+  "id": "junie",
+  "order": 13,
+  "name": "Junie (JetBrains)",
+  "vendor": "JetBrains",
+  "surfaces": [
+    {
+      "id": "junie-skill",
+      "name": "Junie CLI and IDE plugin: skill folder",
+      "kind": "skill-dir",
+      "capability": "local-agent",
+      "native": true,
+      "default": true
+    }
+  ],
+  "skill_dirs": {
+    "user": "~/.junie/skills",
+    "project": ".junie/skills"
+  },
+  "reads": {
+    "user": [
+      "~/.junie/skills"
+    ],
+    "project": [
+      ".junie/skills"
+    ]
+  },
+  "detect": {
+    "paths": [
+      "~/.junie"
+    ],
+    "commands": [
+      "junie"
+    ]
+  },
+  "notes": "Junie suggests importing skills it finds in .cursor/skills, .claude/skills or .codex/skills into .junie/skills.",
+  "prerequisites": [
+    "Junie",
+    "Python 3.10+ and Chromium for the engine"
+  ],
+  "docs": [
+    {
+      "title": "Agent skills (Junie)",
+      "url": "https://junie.jetbrains.com/docs/agent-skills.html",
+      "method": "excerpt",
+      "facts": "Project <projectRoot>/.junie/skills/<name>/; user ~/.junie/skills/<name>/ (%USERPROFILE%\\.junie\\skills on Windows). Skills are invoked only when they match the task."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "partial",
+      "evidence": "the installer tests (Linux) put the skill, stamp and all files in the folder this host's documentation names; the host itself was not run; docs/hosts/EVIDENCE.md#junie-jetbrains"
+    },
+    "discovery": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "scan": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "persistence": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "editing": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    }
+  }
+}

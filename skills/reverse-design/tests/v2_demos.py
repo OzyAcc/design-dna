@@ -14,6 +14,8 @@ import traceback
 from pathlib import Path
 
 import dna
+import crash
+import fontset
 from apply_patch import load_variant, new_variant, transact
 from bundle import Library, export_bundle, import_bundle, validate_bundle
 from common import read_json, store_root, template_dir, write_json
@@ -147,13 +149,14 @@ def t17(root, fx, record, expect_error):
     ok2, e2 = expect_error(lambda: dna.run('set headline.content = "صُنعت لكلّ يوم"'), "lacks glyphs")
     ok3, e3 = expect_error(lambda: dna.run('set label.content = "موسم جديد"'), "breaks joining")
     long_ar = "تصميم يدوم لكل يوم ولكل مناسبة ولكل رحلة\\nحقيبة يومية فاخرة 2026"  # > 920 px at 84 px: must overflow
-    ok4, e4 = expect_error(lambda: dna.run(f'adapt language=ar headline="{long_ar}" font="C:/Windows/Fonts/arialbd.ttf"'), "fit_conflict")
+    arabic_font = fontset.path("arabic")
+    ok4, e4 = expect_error(lambda: dna.run(f'adapt language=ar headline="{long_ar}" font="{arabic_font}"'), "fit_conflict")
     _, _, h1 = load_variant(tid, vid)
     patch = o / "arabic-fit.json"
     write_json(patch, {"schema_version": "1.0.0", "base_revision": h1["revision"], "intent": "long Arabic headline, readable fit allowed",
                        "ops": [{"op": "set", "path": "headline.fit", "value": {"policy": "fit", "min_size": 56, "max_lines": 2}},
                                {"op": "adapt", "language": "ar", "contents": {"headline": long_ar.replace("\\n", "\n")},
-                                "font": "C:/Windows/Fonts/arialbd.ttf"}]})
+                                "font": arabic_font}]})
     r = dna.run(f'batch "{patch}"')
     txn = txn_of(r)
     keep_artifacts(o, txn)
@@ -267,8 +270,10 @@ def t20(root, fx, record, expect_error):
     o = folder(root, 20, "bundle-roundtrip")
     lib = Path(root) / "bundle-library"
     b1 = export_bundle(T, lib, "embed")
-    b2 = export_bundle(T, lib, "reference")
-    v1, v2 = validate_bundle(b1["bundle"]), validate_bundle(b2["bundle"])
+    # its own folder: in one library the newest export wins by name, and which one is newer depends on the clock
+    b2 = export_bundle(T, Path(root) / "bundle-library-fontref", "reference")
+    fdirs = [fontset.font_dir()]  # where referenced fonts resolve by hash (the system folders are searched too)
+    v1, v2 = validate_bundle(b1["bundle"]), validate_bundle(b2["bundle"], fdirs)
     v2_nosys = validate_bundle(b2["bundle"], search_system=False)
     import zipfile
 
@@ -292,7 +297,7 @@ def t20(root, fx, record, expect_error):
     edited = next(vid for vid, v in manifest["variants"].items() if v["head"] != v["baseline_revision"])
     dna.session({"template": TID, "variant": edited})
     u = dna.run("undo last")
-    imp2 = import_bundle(lib / Path(b2["bundle"]).name, as_id="editorial-fontref")
+    imp2 = import_bundle(b2["bundle"], as_id="editorial-fontref", font_dirs=fdirs)
     t2 = template_dir("editorial-fontref")
     rr2 = render(read_json(t2 / "scene.json"), t2, o / "re-render-fontref", name="baseline")
     same2 = pixel_metrics(decode(rr2["png"])[0], decode(tdir / passport["baseline_render"]["path"])[0])["unequal_pixels"]
@@ -314,6 +319,20 @@ def t20(root, fx, record, expect_error):
     }, [o / "results.json"], notes=f"original working store moved to {removed}")
 
 
+def launchable(channel) -> bool:
+    from playwright.sync_api import sync_playwright
+
+    from common import DnaError
+    from renderer_env import launch
+
+    try:
+        with sync_playwright() as p:
+            launch(p, channel)[0].close()
+        return True
+    except DnaError:
+        return False
+
+
 def t21(root, fx, record, expect_error):
     o = folder(root, 21, "renderer-drift")
     lib = Path(root) / "bundle-library"
@@ -327,12 +346,13 @@ def t21(root, fx, record, expect_error):
     ok_sim, err_sim = expect_error(lambda: render(scene, tdir, o / "should-not-render"), "renderer_drift")
     write_json(tdir / "passport.json", pp)
     results = {"simulated": err_sim.as_dict() if err_sim else None}
-    other = "msedge" if pin["channel"] != "msedge" else "chrome"
+    other = next((ch for ch in ("msedge", "chrome", "chromium") if ch != pin["channel"] and launchable(ch)), "msedge")
     os.environ["DESIGN_DNA_BROWSER"] = other
     try:
         ok_real, err_real = expect_error(lambda: render(scene, tdir, o / "should-not-render-2"), "renderer_drift")
         if not ok_real and err_real and err_real.code == "renderer_unavailable":
-            record(21, "Renderer version drift", {}, notes=f"{other} not installed: real channel drift UNVERIFIED", status="unverified")
+            record(21, "Renderer version drift", {}, status="unverified",
+                   notes=f"no browser channel besides the pinned {pin['channel']} is installed: real channel drift UNVERIFIED")
             return
         m = new_variant("drift-probe", "edit under drift")
         _, _, head = load_variant("drift-probe", m["id"])
@@ -374,7 +394,7 @@ def run(root, fx, record, want, expect_error):
         try:
             fn(root, fx, record, expect_error)
         except Exception as e:  # a crash is a failed demonstration
-            record(n, f"crashed: T{n:02d}", {"ran without crashing": f"{e.__class__.__name__}: {e}"}, notes=traceback.format_exc()[-1500:])
+            record(n, f"crashed: T{n:02d}", {"ran without crashing": crash.reason(e)}, notes=traceback.format_exc()[-1500:])
     if want(23):
         record(23, "Host persistent storage (e.g. ChatGPT Work file store) as a bundle backend", {}, status="unverified",
                notes="Bundles + FilesystemBackend are implemented and tested (T20). A host file store needs an adapter with "

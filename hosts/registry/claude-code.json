@@ -1,0 +1,89 @@
+{
+  "id": "claude-code",
+  "order": 3,
+  "name": "Claude Code",
+  "vendor": "Anthropic",
+  "aliases": [
+    "claude"
+  ],
+  "surfaces": [
+    {
+      "id": "claude-code-skill",
+      "name": "CLI, desktop Code tab, IDE extensions: skill folder",
+      "kind": "skill-dir",
+      "capability": "local-agent",
+      "native": true,
+      "default": true
+    },
+    {
+      "id": "claude-code-plugin",
+      "name": "Plugin from this repository's marketplace",
+      "kind": "plugin",
+      "capability": "local-agent",
+      "native": true,
+      "steps": [
+        "claude plugin marketplace add OzyAcc/design-dna",
+        "claude plugin install design-dna@design-dna",
+        "python -m pip install -r requirements.txt (once, for the engine)"
+      ]
+    }
+  ],
+  "skill_dirs": {
+    "user": "~/.claude/skills",
+    "project": ".claude/skills"
+  },
+  "reads": {
+    "user": [
+      "~/.claude/skills"
+    ],
+    "project": [
+      ".claude/skills"
+    ]
+  },
+  "detect": {
+    "paths": [
+      "~/.claude"
+    ],
+    "commands": [
+      "claude"
+    ]
+  },
+  "prerequisites": [
+    "Claude Code",
+    "Python 3.10+ and Chromium for the engine"
+  ],
+  "docs": [
+    {
+      "title": "Agent Skills (Claude Code)",
+      "url": "https://code.claude.com/docs/en/skills",
+      "method": "live",
+      "facts": "Personal skills in ~/.claude/skills/<name>/SKILL.md, project skills in .claude/skills/<name>/SKILL.md; plugins bundle skills under skills/."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "verified",
+      "evidence": "install.py put the skill in ~/.claude/skills (also through install.sh over a copy left by the old installer); claude plugin validate passes on the repository manifest; docs/hosts/EVIDENCE.md#claude-code"
+    },
+    "discovery": {
+      "status": "verified",
+      "evidence": "Claude Code 2.1.292 lists reverse-design in its skills and slash commands at session start; docs/hosts/EVIDENCE.md#claude-code"
+    },
+    "invocation": {
+      "status": "verified",
+      "evidence": "in two fresh claude -p sessions the model's first call was Skill(reverse-design); docs/hosts/EVIDENCE.md#claude-code"
+    },
+    "scan": {
+      "status": "verified",
+      "evidence": "session A: intake, profile/ink/edges measurements, role colours, annotate_scan, validate_model VALID on a 1080x1350 poster (a scan of 5 categories, as asked; full 16-category scans are covered by acceptance T01/T02); docs/hosts/EVIDENCE.md#claude-code"
+    },
+    "persistence": {
+      "status": "verified",
+      "evidence": "session A exported a bundle; session B, a new process with an empty store, fetched it by name and read its passport; docs/hosts/EVIDENCE.md#claude-code"
+    },
+    "editing": {
+      "status": "verified",
+      "evidence": "session B: 'change only the headline … keep everything else' committed; only nodes.n-headline.content changed; 0 pixels changed outside the headline against the approved baseline; docs/hosts/EVIDENCE.md#claude-code"
+    }
+  }
+}

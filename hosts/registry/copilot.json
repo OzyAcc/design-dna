@@ -1,0 +1,119 @@
+{
+  "id": "copilot",
+  "order": 6,
+  "name": "GitHub Copilot",
+  "vendor": "GitHub",
+  "surfaces": [
+    {
+      "id": "copilot-skill",
+      "name": "Copilot CLI, VS Code agent mode, JetBrains, Copilot app: skill folder",
+      "kind": "skill-dir",
+      "capability": "local-agent",
+      "native": true,
+      "default": true
+    },
+    {
+      "id": "copilot-plugin",
+      "name": "Copilot CLI plugin, installed as plugin@marketplace",
+      "kind": "plugin",
+      "package": "agent-plugin",
+      "capability": "local-agent",
+      "native": true,
+      "steps": [
+        "From GitHub: copilot plugin marketplace add OzyAcc/design-dna, then copilot plugin install design-dna@design-dna (Copilot reads the repository's .claude-plugin marketplace). The installer does the same: python install.py install --target copilot --method plugin --from github",
+        "From this checkout: python install.py install --target copilot --method plugin (builds a local marketplace at ~/design-dna/hosts/copilot-marketplace and installs design-dna@design-dna-local)",
+        "From the download: unzip design-dna-agent-plugin.zip, then copilot plugin marketplace add <unzipped folder> and copilot plugin install design-dna@design-dna-local",
+        "Avoid copilot plugin install <path or URL>: Copilot warns that direct installs are deprecated and will stop working; every route above goes through a marketplace.",
+        "VS Code lists plugins installed by the Copilot CLI under Agent Plugins - Installed."
+      ]
+    },
+    {
+      "id": "copilot-cloud",
+      "name": "Copilot cloud agent and code review (repository skills)",
+      "kind": "skill-dir",
+      "capability": "hosted-sandbox",
+      "native": true,
+      "steps": [
+        "python install.py install --target copilot --scope project --project <your repo>  (writes .github/skills/reverse-design)",
+        "Commit the folder. The cloud agent reads repository skills."
+      ]
+    }
+  ],
+  "skill_dirs": {
+    "user": "~/.copilot/skills",
+    "project": ".github/skills"
+  },
+  "reads": {
+    "user": [
+      "~/.copilot/skills",
+      "~/.agents/skills",
+      "~/.claude/skills"
+    ],
+    "project": [
+      ".github/skills",
+      ".claude/skills",
+      ".agents/skills"
+    ]
+  },
+  "detect": {
+    "paths": [
+      "~/.copilot"
+    ],
+    "commands": [
+      "copilot"
+    ]
+  },
+  "prerequisites": [
+    "A GitHub Copilot plan",
+    "Python 3.10+ and Chromium for the engine on local surfaces"
+  ],
+  "docs": [
+    {
+      "title": "About agent skills",
+      "url": "https://docs.github.com/en/copilot/concepts/agents/about-agent-skills",
+      "method": "repo",
+      "commit": "github/docs@8794b3c",
+      "facts": "Skills work with the cloud agent, code review, Copilot CLI, the Copilot app, and agent mode in VS Code and JetBrains IDEs. Project skills: .github/skills, .claude/skills, .agents/skills. Personal skills: ~/.copilot/skills, ~/.agents/skills. gh skill (public preview, gh 2.90+) installs skills from repositories."
+    },
+    {
+      "title": "About GitHub Copilot plugins / CLI plugin reference",
+      "url": "https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference",
+      "method": "repo",
+      "commit": "github/docs@8794b3c",
+      "facts": "Agent Plugins 1.0: plugin.json at the plugin root with the agent-plugins.org $schema; skills only from skills/. Legacy plugins also read .claude-plugin/plugin.json; marketplaces are read from marketplace.json, .github/plugin/marketplace.json or .claude-plugin/marketplace.json. copilot plugin install accepts a local path."
+    },
+    {
+      "title": "Use Agent Skills in VS Code",
+      "url": "https://code.visualstudio.com/docs/agent-customization/agent-skills",
+      "method": "repo",
+      "commit": "microsoft/vscode-docs@4fe6b03",
+      "facts": "Project skills: .github/skills, .claude/skills, .agents/skills. Personal skills: ~/.copilot/skills, ~/.claude/skills, ~/.agents/skills. chat.agentSkillsLocations is deprecated."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "verified",
+      "evidence": "skill folder; Agent Plugins 1.0 package through a local marketplace; and from GitHub through the repository's marketplace (Copilot CLI 1.0.92), each without a deprecation warning; plugin uninstall verified; docs/hosts/EVIDENCE.md#github-copilot"
+    },
+    "discovery": {
+      "status": "verified",
+      "evidence": "copilot skill list shows reverse-design as a personal skill and as a plugin skill; docs/hosts/EVIDENCE.md#github-copilot"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    },
+    "scan": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    },
+    "persistence": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    },
+    "editing": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    }
+  }
+}

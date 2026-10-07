@@ -1,0 +1,108 @@
+{
+  "id": "codex",
+  "order": 2,
+  "name": "OpenAI Codex",
+  "vendor": "OpenAI",
+  "surfaces": [
+    {
+      "id": "codex-skill",
+      "name": "Codex CLI, IDE extension and app: skill folder",
+      "kind": "skill-dir",
+      "capability": "local-agent",
+      "native": true,
+      "default": true
+    },
+    {
+      "id": "codex-plugin",
+      "name": "Codex plugin from a local marketplace",
+      "kind": "plugin",
+      "package": "codex-plugin",
+      "capability": "local-agent",
+      "native": true,
+      "steps": [
+        "python install.py install --target codex --method plugin",
+        "This builds ~/design-dna/hosts/codex-marketplace and, when codex is on PATH, runs: codex plugin marketplace add <that folder>, then codex plugin add design-dna@design-dna-local"
+      ]
+    }
+  ],
+  "skill_dirs": {
+    "user": "~/.agents/skills",
+    "project": ".agents/skills"
+  },
+  "reads": {
+    "user": [
+      "~/.agents/skills",
+      "/etc/codex/skills"
+    ],
+    "project": [
+      ".agents/skills"
+    ]
+  },
+  "detect": {
+    "paths": [
+      "~/.codex"
+    ],
+    "commands": [
+      "codex"
+    ]
+  },
+  "overlay": "openai",
+  "prerequisites": [
+    "Codex CLI, IDE extension or app, signed in",
+    "Python 3.10+ and Chromium for the engine (python install.py doctor)"
+  ],
+  "docs": [
+    {
+      "title": "Agent Skills (Codex)",
+      "url": "https://developers.openai.com/codex/skills",
+      "method": "excerpt",
+      "facts": "Skill locations: $CWD/.agents/skills, parents up to $REPO_ROOT/.agents/skills, $HOME/.agents/skills, /etc/codex/skills, bundled system skills. Optional agents/openai.yaml sets interface fields and policy such as allow_implicit_invocation."
+    },
+    {
+      "title": "Package your plugin",
+      "url": "https://developers.openai.com/codex/plugins/build",
+      "method": "excerpt",
+      "facts": "A plugin folder has .codex-plugin/plugin.json and skills/<name>/SKILL.md. Marketplaces live at $REPO_ROOT/.agents/plugins/marketplace.json or ~/.agents/plugins/marketplace.json; source.path is ./-prefixed and relative to the marketplace root. codex plugin marketplace add takes owner/repo, Git URLs or local paths."
+    },
+    {
+      "title": "openai/plugins (official examples)",
+      "url": "https://github.com/openai/plugins",
+      "method": "repo",
+      "commit": "5fd93af",
+      "facts": ".codex-plugin/plugin.json declares \"skills\": \"./skills/\" and an interface block; .agents/plugins/marketplace.json lists plugins with source {source: local, path} and a policy."
+    },
+    {
+      "title": "Use Agent Skills in VS Code",
+      "url": "https://code.visualstudio.com/docs/agent-customization/agent-skills",
+      "method": "repo",
+      "commit": "microsoft/vscode-docs@4fe6b03",
+      "facts": "Codex discovers .agents/skills natively."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "verified",
+      "evidence": "install.py put the skill in ~/.agents/skills and, separately, installed the plugin through Codex's own marketplace commands (codex-cli 0.160.1); docs/hosts/EVIDENCE.md#codex"
+    },
+    "discovery": {
+      "status": "verified",
+      "evidence": "codex debug prompt-input lists reverse-design (skill folder) and design-dna:reverse-design (plugin) in the model-visible prompt; docs/hosts/EVIDENCE.md#codex"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    },
+    "scan": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    },
+    "persistence": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    },
+    "editing": {
+      "status": "untested",
+      "evidence": "needs a signed-in session with a model; none was available in the build environment"
+    }
+  }
+}

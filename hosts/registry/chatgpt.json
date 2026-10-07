@@ -1,0 +1,99 @@
+{
+  "id": "chatgpt",
+  "order": 1,
+  "name": "ChatGPT",
+  "vendor": "OpenAI",
+  "overlay": "openai",
+  "surfaces": [
+    {
+      "id": "chatgpt-skills",
+      "name": "ChatGPT Skills (Business, Enterprise, Healthcare and Edu workspaces)",
+      "kind": "upload",
+      "package": "chatgpt-skill",
+      "capability": "hosted-sandbox",
+      "native": true,
+      "steps": [
+        "Download design-dna-chatgpt-skill.zip from the latest release, or build it: python install.py package --target chatgpt",
+        "In ChatGPT, open Plugins in the sidebar, then the Skills tab.",
+        "Select Create, then Upload from your computer, and choose the zip. It holds one top-level folder, reverse-design/.",
+        "Enterprise and Edu only: a workspace admin enables Skills first, under Permissions & Roles in the admin dashboard.",
+        "Start a chat, attach a reference image and ask: Scan this design with Design DNA and save it as \"Spring Launch\"."
+      ],
+      "limits": "Not offered on Free, Plus or Pro; use the instruction kit there."
+    },
+    {
+      "id": "chatgpt-instructions",
+      "name": "Projects or custom GPTs (Free, Plus, Pro, or any workspace without Skills)",
+      "kind": "instructions",
+      "package": "instructions-kit",
+      "capability": "instructions-only",
+      "native": false,
+      "steps": [
+        "Download design-dna-instructions-kit.zip and unzip it.",
+        "Project: paste INSTRUCTIONS.md into the project instructions and add the files in knowledge/ as project files.",
+        "Custom GPT: paste INSTRUCTIONS.md into Instructions (it stays under 8,000 characters) and upload the files in knowledge/ as Knowledge.",
+        "The assistant must label every answer as instruction-only: nothing is measured, rendered or verified."
+      ],
+      "limits": "A fallback, not a skill. Running the engine's Python by hand in ChatGPT's data analysis tool is possible in principle but not supported or tested."
+    }
+  ],
+  "not_available": [
+    "The public plugin directory shared by ChatGPT and Codex lists plugins after OpenAI publishes them; Design DNA is not listed there."
+  ],
+  "prerequisites": [
+    "Native: a ChatGPT Business, Enterprise, Healthcare or Edu workspace with Skills enabled",
+    "Fallback: any ChatGPT plan with Projects or custom GPTs"
+  ],
+  "docs": [
+    {
+      "title": "Skills in ChatGPT",
+      "url": "https://help.openai.com/en/articles/20001066-skills-in-chatgpt",
+      "method": "excerpt",
+      "facts": "Business, Enterprise, Healthcare and Edu plans; Free, Plus and Pro are not in the rollout. Plugins in the sidebar, Skills tab. Create, then Upload from your computer. Enterprise and Edu admins enable Skills under Permissions & Roles. skill-creator is included by default."
+    },
+    {
+      "title": "Build skills",
+      "url": "https://learn.chatgpt.com/docs/build-skills",
+      "method": "excerpt",
+      "facts": "A skill is a folder anchored by SKILL.md with name and description. ChatGPT and Codex read the name and description first and load SKILL.md when they use the skill."
+    },
+    {
+      "title": "Skills (API guide)",
+      "url": "https://developers.openai.com/api/docs/guides/tools-skills",
+      "method": "excerpt",
+      "facts": "Upload a zip that contains a single top-level folder (recommended). The API accepts zips up to 50 MB and up to 500 files per hosted skill version."
+    },
+    {
+      "title": "Package your plugin",
+      "url": "https://developers.openai.com/codex/plugins/build",
+      "method": "excerpt",
+      "facts": "Public plugins are published once to the universal plugin directory shared by ChatGPT and Codex; local and repository marketplaces serve authoring, testing and team distribution."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "partial",
+      "evidence": "package built and checked against the Agent Skills rules; not uploaded: no ChatGPT workspace access from the build environment; docs/hosts/EVIDENCE.md#chatgpt"
+    },
+    "discovery": {
+      "status": "untested",
+      "evidence": "no ChatGPT account access from the build environment"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "no ChatGPT account access from the build environment"
+    },
+    "scan": {
+      "status": "untested",
+      "evidence": "no ChatGPT account access from the build environment"
+    },
+    "persistence": {
+      "status": "untested",
+      "evidence": "no ChatGPT account access from the build environment"
+    },
+    "editing": {
+      "status": "untested",
+      "evidence": "no ChatGPT account access from the build environment"
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "id": "cursor",
+  "order": 5,
+  "name": "Cursor",
+  "vendor": "Anysphere",
+  "surfaces": [
+    {
+      "id": "cursor-skill",
+      "name": "Cursor agent (editor and CLI): skill folder",
+      "kind": "skill-dir",
+      "capability": "local-agent",
+      "native": true,
+      "default": true
+    }
+  ],
+  "skill_dirs": {
+    "user": "~/.cursor/skills",
+    "project": ".cursor/skills"
+  },
+  "reads": {
+    "user": [
+      "~/.cursor/skills",
+      "~/.agents/skills",
+      "~/.claude/skills",
+      "~/.codex/skills"
+    ],
+    "project": [
+      ".cursor/skills",
+      ".agents/skills",
+      ".claude/skills",
+      ".codex/skills"
+    ]
+  },
+  "detect": {
+    "paths": [
+      "~/.cursor"
+    ],
+    "commands": [
+      "cursor",
+      "cursor-agent"
+    ]
+  },
+  "notes": "Only ~/.cursor/skills syncs to Cursor cloud agents (Settings > Agents > Sync Skills for Cloud Agents). Cloud agents are a hosted sandbox.",
+  "prerequisites": [
+    "Cursor",
+    "Python 3.10+ and Chromium for the engine"
+  ],
+  "docs": [
+    {
+      "title": "Agent Skills (Cursor)",
+      "url": "https://cursor.com/docs/skills",
+      "method": "excerpt",
+      "facts": "Loads .agents/skills, .cursor/skills, ~/.agents/skills and ~/.cursor/skills, and for compatibility .claude/skills, .codex/skills, ~/.claude/skills and ~/.codex/skills. Nested project folders are scoped. Only ~/.cursor/skills syncs to cloud agents."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "partial",
+      "evidence": "the installer tests (Linux) put the skill, stamp and all files in the folder this host's documentation names; the host itself was not run; docs/hosts/EVIDENCE.md#cursor"
+    },
+    "discovery": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "scan": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "persistence": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "editing": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    }
+  }
+}

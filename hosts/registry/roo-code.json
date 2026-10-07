@@ -1,0 +1,79 @@
+{
+  "id": "roo-code",
+  "order": 10,
+  "name": "Roo Code",
+  "vendor": "Roo Code",
+  "aliases": [
+    "roo"
+  ],
+  "surfaces": [
+    {
+      "id": "roo-skill",
+      "name": "Roo Code (VS Code extension): skill folder",
+      "kind": "skill-dir",
+      "capability": "local-agent",
+      "native": true,
+      "default": true
+    }
+  ],
+  "skill_dirs": {
+    "user": "~/.roo/skills",
+    "project": ".roo/skills"
+  },
+  "reads": {
+    "user": [
+      "~/.roo/skills",
+      "~/.agents/skills"
+    ],
+    "project": [
+      ".roo/skills",
+      ".agents/skills"
+    ]
+  },
+  "detect": {
+    "paths": [
+      "~/.roo"
+    ],
+    "commands": []
+  },
+  "notes": "Mode-specific folders (.roo/skills-<mode>/) also exist; the generic folder makes the skill available in every mode. The documentation repository was last updated on 2026-04-21.",
+  "prerequisites": [
+    "Roo Code",
+    "Python 3.10+ and Chromium for the engine"
+  ],
+  "docs": [
+    {
+      "title": "Skills (Roo Code)",
+      "url": "https://docs.roocode.com/features/skills",
+      "method": "repo",
+      "commit": "RooCodeInc/Roo-Code-Docs@a676c41",
+      "facts": "Global ~/.roo/skills/ and ~/.agents/skills/ (%USERPROFILE% on Windows); project .roo/skills/ and .agents/skills/. Project overrides global; .roo overrides .agents at the same level; mode-specific folders override generic ones."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "partial",
+      "evidence": "the installer tests (Linux) put the skill, stamp and all files in the folder this host's documentation names; the host itself was not run; docs/hosts/EVIDENCE.md#roo-code"
+    },
+    "discovery": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "scan": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "persistence": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "editing": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "id": "kiro",
+  "order": 12,
+  "name": "Kiro",
+  "vendor": "Amazon Web Services",
+  "surfaces": [
+    {
+      "id": "kiro-skill",
+      "name": "Kiro IDE and CLI: skill folder",
+      "kind": "skill-dir",
+      "capability": "local-agent",
+      "native": true,
+      "default": true
+    }
+  ],
+  "skill_dirs": {
+    "user": "~/.kiro/skills",
+    "project": ".kiro/skills"
+  },
+  "reads": {
+    "user": [
+      "~/.kiro/skills"
+    ],
+    "project": [
+      ".kiro/skills"
+    ]
+  },
+  "detect": {
+    "paths": [
+      "~/.kiro"
+    ],
+    "commands": [
+      "kiro",
+      "kiro-cli"
+    ]
+  },
+  "prerequisites": [
+    "Kiro",
+    "Python 3.10+ and Chromium for the engine"
+  ],
+  "docs": [
+    {
+      "title": "Skills (Kiro)",
+      "url": "https://kiro.dev/docs/skills/",
+      "method": "excerpt",
+      "facts": "Workspace .kiro/skills/ and global ~/.kiro/skills/; workspace wins on a name clash; the default agent loads both with no configuration."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "partial",
+      "evidence": "the installer tests (Linux) put the skill, stamp and all files in the folder this host's documentation names; the host itself was not run; docs/hosts/EVIDENCE.md#kiro"
+    },
+    "discovery": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "scan": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "persistence": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "editing": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    }
+  }
+}

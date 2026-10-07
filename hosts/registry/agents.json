@@ -1,0 +1,72 @@
+{
+  "id": "agents",
+  "order": 15,
+  "name": "Other Agent Skills hosts (shared .agents folder)",
+  "vendor": "various",
+  "surfaces": [
+    {
+      "id": "agents-skill",
+      "name": "Any host that reads ~/.agents/skills (Amp, Factory, OpenHands, Mistral Vibe and others in the Agent Skills client list)",
+      "kind": "skill-dir",
+      "capability": "local-agent",
+      "native": true,
+      "default": true
+    }
+  ],
+  "skill_dirs": {
+    "user": "~/.agents/skills",
+    "project": ".agents/skills"
+  },
+  "reads": {
+    "user": [
+      "~/.agents/skills"
+    ],
+    "project": [
+      ".agents/skills"
+    ]
+  },
+  "detect": {
+    "paths": [],
+    "commands": []
+  },
+  "notes": "One copy here is read by several hosts: Codex, Gemini CLI, OpenCode, Cursor, GitHub Copilot, Roo Code and Goose all list ~/.agents/skills. Hosts not listed individually were not checked: confirm the folder in your host's documentation.",
+  "prerequisites": [
+    "A host that implements the Agent Skills standard",
+    "Python 3.10+ and Chromium for the engine"
+  ],
+  "docs": [
+    {
+      "title": "Agent Skills specification and client list",
+      "url": "https://agentskills.io/specification",
+      "method": "repo",
+      "commit": "agentskills/agentskills@69ef37e",
+      "facts": "name: 1-64 lowercase letters, digits and single hyphens, matching the folder; description 1-1024 characters; optional license, compatibility (up to 500 characters), metadata, allowed-tools (experimental). The client list names 46 products."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "verified",
+      "evidence": "installer tests put the skill in ~/.agents/skills; docs/hosts/EVIDENCE.md#other-agent-skills-hosts"
+    },
+    "discovery": {
+      "status": "partial",
+      "evidence": "Codex lists the copy in ~/.agents/skills in its model-visible prompt; other hosts that read this folder were not run; docs/hosts/EVIDENCE.md#codex"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "needs a signed-in host session; none was available in the build environment"
+    },
+    "scan": {
+      "status": "untested",
+      "evidence": "needs a signed-in host session; none was available in the build environment"
+    },
+    "persistence": {
+      "status": "untested",
+      "evidence": "needs a signed-in host session; none was available in the build environment"
+    },
+    "editing": {
+      "status": "untested",
+      "evidence": "needs a signed-in host session; none was available in the build environment"
+    }
+  }
+}

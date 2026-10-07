@@ -90,9 +90,25 @@ Every row is one of:
 | | Status |
 |---|---|
 | Windows 10/11, Python 3.12, Chrome 154 / Edge 154 | tested (local + GitHub Actions `windows-latest`) |
-| macOS / Linux | partial: the engine is pure Python + Chromium, but the acceptance fixtures use Windows system fonts |
+| Linux (Ubuntu 24.04), Python 3.13, Playwright's Chromium 141, portable test fonts | tested locally: 31/31, 2 unverified (T21 needs a second browser channel; T23 by design). CI job `acceptance-linux` added |
+| macOS | untested: the engine and the portable suite have no Windows dependency left |
 
 Exact tested versions: [`requirements-lock.txt`](requirements-lock.txt).
+
+## AI tools (host installation)
+
+Results per AI tool and stage are in [docs/hosts/COMPATIBILITY.md](docs/hosts/COMPATIBILITY.md) (generated from
+`hosts/registry/`) with evidence in [docs/hosts/EVIDENCE.md](docs/hosts/EVIDENCE.md). They are host results, not
+operating-system results.
+
+| Capability | Status | Tests | Notes |
+|---|---|---|---|
+| One canonical skill packaged per host (skill folders, upload zips, Codex plugin, Agent Plugins 1.0, Gemini extension, instruction kit) | implemented + tested | `hosts/tests/test_installer.py` | every package checked against the Agent Skills rules |
+| `install.py` install / update / uninstall / doctor, dry run, user and project scope, stamped copies, backups instead of deletion | implemented + tested | `hosts/tests/test_installer.py` | Linux run; Windows and macOS in the `hosts` workflow |
+| Discovery in Codex, Gemini CLI, GitHub Copilot, OpenCode (skill folders and plugin / extension routes) | tested | `hosts/tests/host_discovery.py` | each host's own CLI lists the skill; no model was called |
+| Discovery, invocation, scan, persistence and controlled editing in Claude Code | tested | EVIDENCE.md (Claude Code) | two fresh sessions, bundles as the only link between them |
+| ChatGPT Skills, Claude apps, Cursor, Windsurf, Cline, Roo Code, Kiro, Junie, Goose | partial | — | packaged and installed where their documentation says; the hosts themselves were not run |
+| Instruction-only fallback | partial | `hosts/tests/test_installer.py` | labelled kit; measures, renders and verifies nothing by design |
 
 ## SKILL.md claims audit
 

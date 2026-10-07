@@ -1,0 +1,15 @@
+{
+  "name": "design-dna-local",
+  "owner": {"name": "OzyAcc"},
+  "metadata": {"description": "Design DNA, built from a local checkout by install.py", "version": "{{VERSION}}"},
+  "plugins": [
+    {
+      "name": "design-dna",
+      "source": "./plugins/design-dna",
+      "description": "Scan a visual reference into an evidence-backed, editable template and adapt it without drift (skill: reverse-design).",
+      "version": "{{VERSION}}",
+      "license": "MIT",
+      "category": "design"
+    }
+  ]
+}

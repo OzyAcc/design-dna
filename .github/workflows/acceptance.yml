@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
       - run: pip install pyflakes jsonschema
       - name: pyflakes
-        run: python -m pyflakes skills/reverse-design/scripts skills/reverse-design/tests
+        run: python -m pyflakes skills/reverse-design/scripts skills/reverse-design/tests hosts install.py
       - name: schemas are valid JSON Schema 2020-12
         run: |
           python - <<'EOF'
@@ -30,7 +30,7 @@ jobs:
           EOF
 
   acceptance:
-    # The suite uses Windows system fonts (Arial, Georgia, ...) and the preinstalled Chrome.
+    # The verified configuration: Windows system fonts (Arial, Georgia, ...) and the preinstalled Chrome.
     runs-on: windows-latest
     timeout-minutes: 120
     env:
@@ -51,5 +51,48 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: acceptance-evidence
+          path: acceptance-out/
+          retention-days: 14
+
+  acceptance-linux:
+    # The same suite with the portable font set vendored in tests/fonts (OFL / Bitstream Vera licences),
+    # the exact package versions from requirements-lock.txt, and a second browser channel for the drift test.
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      DESIGN_DNA_ACCEPTANCE_DIR: ${{ github.workspace }}/acceptance-out
+      DESIGN_DNA_FONTSET: portable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-lock.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: capability report
+        run: python skills/reverse-design/scripts/capabilities.py
+      - name: acceptance suite (portable fonts)
+        run: python skills/reverse-design/tests/run_acceptance.py
+      - name: failure crops in the log (base64 PNG, for readers without the artifact)
+        if: failure()
+        run: |
+          nproc; grep -m1 "model name" /proc/cpuinfo || true; fc-match sans-serif; fc-match "Liberation Sans:bold"
+          python - <<'EOF'
+          import base64, glob, io
+          from PIL import Image
+          boxes = {"cta": (140, 1170, 380, 1226), "label": (70, 135, 430, 185)}
+          for name in ("reference/reference.png", "t01-synthetic-measured/render/render.png"):
+              for p in glob.glob(f"acceptance-out/*/{name}"):
+                  im = Image.open(p).convert("RGB")
+                  for k, b in boxes.items():
+                      buf = io.BytesIO()
+                      im.crop(b).save(buf, "PNG", optimize=True)
+                      print("CROP", name, k, ",".join(map(str, b)), base64.b64encode(buf.getvalue()).decode())
+          EOF
+      - name: upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-evidence-linux
           path: acceptance-out/
           retention-days: 14

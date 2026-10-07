@@ -93,6 +93,69 @@ Final run `20261006-234454`: **32/32 passed, 1 entry unverified by design**. Ren
 | Audit regressions | T24–T33 | pass |
 | Unverified integration | T23 — host storage adapter (no host available) | unverified |
 
+### After 2.0.0: the suite off Windows (unreleased)
+
+The first open item of the audit response was a Linux/macOS suite with redistributable fonts. On Linux the
+unchanged 2.0.0 suite stopped before its first test: the fixtures opened `C:/Windows/Fonts/bahnschrift.ttf`.
+
+Every font the suite touches now comes from a **font set** (`tests/fixtures/fontset.py`) of named roles. The
+`windows` set is the verified 2.0.0 configuration. The `portable` set is open-licensed files vendored in
+[`tests/fonts/`](../skills/reverse-design/tests/fonts/README.md), so every machine hashes the same font bytes.
+Expected faces (T01's "true faces", T03's verified file) are read from the files rather than written as names.
+
+| Role | windows | portable |
+|---|---|---|
+| sans (label, CTA) | Arial Bold | Liberation Sans Bold |
+| serif (headline, no Arabic glyphs) | Georgia Bold | DejaVu Serif Bold |
+| sans candidates | Arial, Verdana, Tahoma, Segoe UI, Calibri, Trebuchet (Bold) | Liberation Sans, DejaVu Sans, Carlito (Bold) |
+| serif candidates | Georgia, Times New Roman, Cambria, Constantia (Bold) | DejaVu Serif, Liberation Serif, Caladea (Bold) |
+| Arabic + Latin | Arial Bold | Amiri Bold |
+| T02 captions (never a candidate) | Bahnschrift, Bold instance | Open Sans, Bold instance |
+| variable `wdth` axis (T27) | Bahnschrift | Open Sans |
+
+| Symptom (first Linux run) | Root cause | Fix |
+|---|---|---|
+| Setup crashed: `cannot open resource` | Windows font paths hard-coded in fixtures and tests | font set roles; portable fonts vendored with licences |
+| T02: one caption baseline 1.03 px from the truth (limit 1 px) | the baseline was render-fitted together with size and x against a substitute font, which pulled it towards the substitute's glyph shapes. The node's provenance already said "measured from ink" | the baseline is held at the ink measurement (exact here); only size and x are fitted, so the provenance is now true |
+| T17 crashed: `fit_conflict` on the long Arabic headline with a 56 px minimum | the first portable Arabic font (DejaVu Sans Bold) sets that line at 1244 px at 56 px in a 920 px box. The engine was right to refuse | Amiri Bold: fits at 62 px, overflows at 84 px, as Arial does |
+| T21 could only test a switch to Edge | the second channel was hard-coded | the first other installed channel (Edge, Chrome, Playwright's Chromium) is used; none → unverified |
+
+**Linux run `20261007-000228`: 31/31 passed, 2 unverified.** Ubuntu 24.04 container, Python 3.13.16, the packages of
+`requirements-lock.txt` except Playwright 1.56.0 with its Chromium 141.0.7390.37 (the build installed in that
+container), portable fonts, 4 minutes. T21 is unverified there because no second browser channel was installed.
+T23 is unverified by design.
+
+- T01 with different faces: max geometry error 0.46 px, headline size 0.004 %, label tracking 0.002 px, baselines
+  ≤ 0.03 px, shadow σ 0.93 px. The true faces (Liberation Sans Bold, DejaVu Serif Bold) ranked first; identity
+  stays `unknown`. `editable_close` passes.
+- T02: frames within 1 px, captions at the true baselines (485 / 932), best substitute Liberation Sans Bold. All six
+  caption regions fail and are reported; readiness stays `partial_baseline`.
+- T10 determinism, T20 bundle round-trip and T22 SVG round-trip hold with 0 differing pixels on this renderer too.
+
+**Re-run after the host packaging work: `20261007-005538`, 31/31 passed, 2 unverified**, with two engine fixes: an
+in-progress scan no longer crashes `annotate_scan.py`, and library lookups break export-time ties in favour of the
+self-contained bundle (a same-second export pair had made T20 import the font-referenced bundle and fail).
+
+**Re-run with Google Chrome for Testing 154.0.8037.57 (the version GitHub's Ubuntu runners carry):
+`20261007-011727`, 32/32 passed, 1 unverified (T23, by design).** Two browser channels were installed, so T21's real
+drift check ran (Chrome pinned, Playwright's Chromium as the switch). This run also carries the real fix for the
+T20 crash above: a lookup by name returns the newest export, and the font-referenced bundle was the newer one
+whenever its export landed in a later second than the self-contained one, which the same-second tie-break did not
+cover. T20 now keeps the two bundles in separate folders. T01 alone also passes with the CI job's exact Python
+(3.12) and `requirements-lock.txt` packages.
+
+**T01 on GitHub's runners, and the renderer fix: `20261007-015350`, 32/32 passed, 1 unverified (T23).** T01 still
+failed on `ubuntu-latest` (CTA regions below SSIM 0.99, CTA fit MAE 6.39 instead of 0.07). Crops printed by the CI job
+showed the cause: the runner's text was vertically hinted. This build container carries a fontconfig override that
+disables hinting; stock Ubuntu enables slight hinting, and Chrome on Linux applies it per font on some text paths
+despite `--font-render-hinting=none`, so a full render and a fitting page rasterised the same text differently. With
+the container's override removed (stock Ubuntu fontconfig, as on the runners) T01 failed with the runner's exact
+numbers. The renderer now hands the browser its own fontconfig file (the system configuration plus antialiasing, no
+hinting, no subpixel order); with it the full suite passes under the stock configuration, Chrome 154.0.8037.97.
+
+The CI workflow gains an `acceptance-linux` job (ubuntu-latest, portable fonts, `requirements-lock.txt`). It runs
+on the next push to `main` or pull request; its results are not part of this report yet. macOS is untested.
+
 
 ## 3. What was built (1.0.0)
 
@@ -240,7 +303,8 @@ defects, and each fix made the engine more honest or more accurate:
   adapter that is not included or tested.
 - **Cross-machine reproduction:** the renderer pin detects a different browser or machine; identical pixels across
   machines are not claimed.
-- **Platform:** verified on Windows with Chrome/Edge; the acceptance suite uses Windows system fonts.
+- **Platform:** verified on Windows with Chrome/Edge (Windows system fonts), and on Linux with Playwright's Chromium
+  and the portable font set (one local run; the CI job is new). macOS is untested.
 
 ## 9. Reproducing everything
 

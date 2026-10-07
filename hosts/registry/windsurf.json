@@ -1,0 +1,76 @@
+{
+  "id": "windsurf",
+  "order": 8,
+  "name": "Windsurf",
+  "vendor": "Cognition",
+  "surfaces": [
+    {
+      "id": "windsurf-skill",
+      "name": "Cascade: skill folder",
+      "kind": "skill-dir",
+      "capability": "local-agent",
+      "native": true,
+      "default": true
+    }
+  ],
+  "skill_dirs": {
+    "user": "~/.codeium/windsurf/skills",
+    "project": ".devin/skills"
+  },
+  "reads": {
+    "user": [
+      "~/.codeium/windsurf/skills"
+    ],
+    "project": [
+      ".devin/skills",
+      ".windsurf/skills"
+    ]
+  },
+  "detect": {
+    "paths": [
+      "~/.codeium/windsurf"
+    ],
+    "commands": [
+      "windsurf"
+    ]
+  },
+  "notes": "Project skills moved to .devin/skills; the legacy .windsurf/skills is still read. Whether Cascade also reads ~/.agents/skills was not confirmed in the official docs, so the installer uses Windsurf's own folder.",
+  "prerequisites": [
+    "Windsurf",
+    "Python 3.10+ and Chromium for the engine"
+  ],
+  "docs": [
+    {
+      "title": "Cascade Skills",
+      "url": "https://docs.windsurf.com/windsurf/cascade/skills",
+      "method": "excerpt",
+      "facts": "User skills in ~/.codeium/windsurf/skills/; workspace skills in .devin/skills/<name>/ (legacy .windsurf/skills/ still read). SKILL.md with name and description; progressive disclosure."
+    }
+  ],
+  "testing": {
+    "install": {
+      "status": "partial",
+      "evidence": "the installer tests (Linux) put the skill, stamp and all files in the folder this host's documentation names; the host itself was not run; docs/hosts/EVIDENCE.md#windsurf"
+    },
+    "discovery": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "invocation": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "scan": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "persistence": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    },
+    "editing": {
+      "status": "untested",
+      "evidence": "needs the host itself; it was not available in the build environment"
+    }
+  }
+}

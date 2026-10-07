@@ -49,7 +49,9 @@ The audit compared v1.0.0 with another engine and listed areas where that engine
 
 ## Still open
 
-- A Linux/macOS fixture suite using redistributable fonts. The current fixtures use Windows system fonts.
+- ~~A Linux/macOS fixture suite using redistributable fonts.~~ Done after 2.0.0 (unreleased): a portable font set
+  vendored with its licences; Linux run 31/31 passed, 2 unverified ([BUILD-REPORT](BUILD-REPORT.md), section 2).
+  A CI job for ubuntu-latest is added and has not run yet. macOS is still untested.
 - A host storage adapter tested inside ChatGPT Work.
 - Independent reproduction. Check the uploaded CI evidence (`acceptance-evidence` artifact) rather than this
   document.

@@ -19,6 +19,8 @@ import numpy as np
 from PIL import Image
 
 import dna
+import crash
+import fontset
 from apply_patch import load_variant
 from common import DnaError, deep, import_asset, read_json, sha256_file, template_dir, write_json
 from compare_render import compare, outside_influence
@@ -131,7 +133,7 @@ def r27(root, fx, record, expect_error):
     ext, _ = expect_error(lambda: check_svg('<svg xmlns="http://www.w3.org/2000/svg"><image href="https://example.com/x.png"/></svg>'),
                           "unsafe_or_invalid_svg")
     ot = deep(base)
-    var = import_asset(tdir, "C:/Windows/Fonts/bahnschrift.ttf", "font", "system_font")
+    var = import_asset(tdir, fontset.path("variable"), "font", fontset.source())
     ot["assets"][var["id"]] = var
     h = next(n for n in ot["nodes"] if n["id"] == "n-headline")
     h["font"] = dict(h["font"], asset=var["id"], features={"kern": 0}, variation={"wdth": 90}, identity={"status": "unknown"})
@@ -277,4 +279,4 @@ def run(root, fx, record, want, expect_error):
         try:
             fn(root, fx, record, expect_error)
         except (Exception, DnaError) as e:
-            record(n, f"crashed: T{n:02d}", {"ran without crashing": f"{e.__class__.__name__}: {e}"}, notes=traceback.format_exc()[-1500:])
+            record(n, f"crashed: T{n:02d}", {"ran without crashing": crash.reason(e)}, notes=traceback.format_exc()[-1500:])

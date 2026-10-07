@@ -34,6 +34,8 @@ from verify_change import render_cached  # noqa: E402
 from common import DnaError, import_asset, read_json, sha256_file, template_dir, write_json  # noqa: E402
 from compare_render import compare, decode, pixel_metrics  # noqa: E402
 from editorial_gt import build_gt  # noqa: E402
+import crash  # noqa: E402
+import fontset  # noqa: E402
 from report import write_report  # noqa: E402
 from inspect_source import create_template  # noqa: E402
 from render_static import compile_svg, render  # noqa: E402
@@ -103,7 +105,8 @@ def t03_duplicate_fonts(ref):
     o = out(3, "duplicate-fonts")
     from fontTools.ttLib import TTFont
 
-    f = TTFont("C:/Windows/Fonts/arialbd.ttf")
+    true = fontset.path("sans")
+    f = TTFont(true)
     for rec in f["name"].names:
         if rec.nameID in (1, 3, 4, 6, 16):
             rec.string = {1: "DNA Duplicate Sans", 3: "DNA Duplicate Sans Bold", 4: "DNA Duplicate Sans Bold",
@@ -111,7 +114,8 @@ def t03_duplicate_fonts(ref):
     dup = FX / "dna-duplicate-sans-bold.ttf"
     f.save(dup)
     tid = "editorial-product-spotlight"
-    fonts = ["C:/Windows/Fonts/arialbd.ttf", str(dup), "C:/Windows/Fonts/verdanab.ttf", "C:/Windows/Fonts/tahomabd.ttf"]
+    fonts = [true, str(dup)] + fontset.paths("lookalikes")
+    true_name = fontset.full_name(true)
     cmd = [sys.executable, str(SCRIPTS / "font_candidates.py"), tid, "--region", "146,1176,230,46", "--text", "Shop the edit",
            "--object", "cta-probe"] + sum([["--font", x] for x in fonts], [])
     r1 = json.loads(subprocess.run(cmd, capture_output=True, text=True, check=True).stdout)
@@ -119,17 +123,17 @@ def t03_duplicate_fonts(ref):
 
     add_evidence(template_dir(tid), [{"evidence_id": "ev-src-font-file", "source_sha256": read_json(template_dir(tid) / "scene.json")["source"]["sha256"],
                                       "region": None, "object": "n-cta-text", "method": "source_extraction", "tool": "acceptance: layered source manifest",
-                                      "value": {"font_sha256": sha256_file("C:/Windows/Fonts/arialbd.ttf")}, "status": "observed",
+                                      "value": {"font_sha256": sha256_file(true)}, "status": "observed",
                                       "confidence": "high", "justification": "the layered source names the exact font file it used"}])
     r2 = json.loads(subprocess.run(cmd + ["--source-evidence", "ev-src-font-file"], capture_output=True, text=True, check=True).stdout)
     sheet = template_dir(tid) / r1["contact_sheet"]
     shutil.copy2(sheet, o / "contact_sheet.png")
     (o / "results.json").write_text(json.dumps({"without_source": r1, "with_source": r2}, indent=2), encoding="utf-8")
     record(3, "Duplicate-looking font candidates keep identity unknown", {
-        "arial + duplicate tie at the top": {"Arial Bold", "DNA Duplicate Sans Bold"} <= set(r1["ties"]) or r1["ties"],
+        f"{true_name} + its renamed duplicate tie at the top": {true_name, "DNA Duplicate Sans Bold"} <= set(r1["ties"]) or r1["ties"],
         "identity unknown without source evidence": r1["identity_status"] == "unknown" or r1,
         "source evidence naming the file hash resolves identity": r2["identity_status"] == "verified" or r2,
-        "resolved to the file the source names (Arial Bold)": r2.get("verified_font") == "Arial Bold" or r2,
+        f"resolved to the file the source names ({true_name})": r2.get("verified_font") == true_name or r2,
     }, [o / "contact_sheet.png", o / "results.json"])
 
 
@@ -247,7 +251,7 @@ def t08_arabic():
     patch = FX / "arabic.json"
     write_json(patch, {"schema_version": "1.0.0", "base_revision": head["revision"], "intent": "Arabic headline, preserve hierarchy",
                        "ops": [{"op": "set", "path": "headline.fit", "value": {"policy": "fit", "min_size": 60, "max_lines": 2}},
-                               {"op": "adapt", "language": "ar", "contents": {"headline": text}, "font": "C:/Windows/Fonts/arialbd.ttf"}]})
+                               {"op": "adapt", "language": "ar", "contents": {"headline": text}, "font": fontset.path("arabic")}]})
     r = dna.run(f'batch "{patch}"')
     _, _, after = load_variant(tid, vid)
     n = [x for x in after["nodes"] if x["id"] == "n-headline"][0]
@@ -412,7 +416,7 @@ def t14_small_errors():
     t = create_template(FX / "blank_1080x1350.png", "Blank Canvas Check", "suggested", tid="blank-canvas-check")
     tdir = template_dir(t["template_id"])
     s = read_json(tdir / "scene.json")
-    font = import_asset(tdir, "C:/Windows/Fonts/arialbd.ttf", "font", "system_font")
+    font = import_asset(tdir, fontset.path("sans"), "font", fontset.source())
     logo = json.loads((FX / "logo.json").read_text())
     s["assets"] = {font["id"]: font}
     s["tokens"] = {"background.paper": {"type": "color", "value": "#FFFFFF", "space": "srgb", "status": "observed", "confidence": "high", "samples": [[400, 600, 200, 200]]}}
@@ -449,6 +453,7 @@ def main() -> int:
     only = {int(x) for x in a.only.split(",") if x}
     want = lambda n: not only or n in only
     ROOT.mkdir(parents=True, exist_ok=True)
+    print(f"font set: {fontset.name()} ({fontset.font_dir().as_posix()})")
     gt, ref, rec = setup()
     print(f"setup: baseline readiness {rec['readiness']} ({rec['verdict']['status']})")
     steps = [(3, lambda: t03_duplicate_fonts(ref)), (4, t04_headline_only), (5, t05_hero_replace), (6, t06_token),
@@ -463,13 +468,13 @@ def main() -> int:
             if n == 4:
                 t4 = res
         except Exception as e:  # a crash is a failed demonstration, recorded with its traceback
-            record(n, f"crashed: {fn.__name__ if hasattr(fn, '__name__') else n}", {"ran without crashing": f"{e.__class__.__name__}: {e}"},
+            record(n, f"crashed: {fn.__name__ if hasattr(fn, '__name__') else n}", {"ran without crashing": crash.reason(e)},
                    notes=traceback.format_exc()[-1500:])
     if want(11) and t4:
         try:
             t11_undo_reload(*t4)
         except Exception as e:
-            record(11, "crashed: undo/reload", {"ran without crashing": f"{e.__class__.__name__}: {e}"}, notes=traceback.format_exc()[-1500:])
+            record(11, "crashed: undo/reload", {"ran without crashing": crash.reason(e)}, notes=traceback.format_exc()[-1500:])
     if want(1) or want(2):
         import operator_scans
 
@@ -479,7 +484,7 @@ def main() -> int:
 
     v2_demos.run(ROOT, FX, record, want, expect_error)
     regressions.run(ROOT, FX, record, want, expect_error)
-    write_report(ROOT, RUN, RESULTS, {"ground_truth_template": gt, "reference": str(ref), "baseline": rec})
+    write_report(ROOT, RUN, RESULTS, {"ground_truth_template": gt, "reference": str(ref), "baseline": rec, "fonts": fontset.summary()})
     return 0 if all(r["status"] in ("pass", "unverified") for r in RESULTS) else 1
 
 

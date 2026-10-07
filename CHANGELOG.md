@@ -3,6 +3,76 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+Design DNA installs in every AI tool that can load it, starting with ChatGPT, from one skill and one engine; and
+the acceptance suite runs off Windows (the first open item of the audit response).
+
+### Added
+- **Choose your AI tool**: ChatGPT (Skills upload for Business, Enterprise, Healthcare and Edu; Codex for every
+  plan; a labelled instruction kit for Free, Plus and Pro), Codex, Claude Code, the Claude apps, Cursor, GitHub
+  Copilot, Gemini CLI, Windsurf, Cline, Roo Code, OpenCode, Kiro, Junie, Goose, any host reading `.agents/skills`,
+  and any assistant without skills. One guide per tool in `docs/hosts/`.
+- **Compatibility registry** (`hosts/registry/*.json`): per host, the surfaces, install method, skill folders it
+  reads, capability level, prerequisites, documentation sources (with how and when each was read) and test status
+  per stage (install, discovery, invocation, scan, persistence, editing). `docs/hosts/COMPATIBILITY.md`, the guides
+  and the README table are generated from it (`python install.py docs`; CI fails when they are stale).
+- **Generated packages** from the canonical skill: ChatGPT and Claude skill zips (with hosted-sandbox notes), a
+  plain skill zip, a Codex plugin with its marketplace, an Agent Plugins 1.0 package (Copilot), a Gemini CLI
+  extension and the instruction kit (`python install.py package`). The `hosts` workflow attaches them to releases.
+- **`install.py`**: `list`, `install`, `update`, `uninstall`, `doctor`, `package`, `docs`; target selection
+  (ids, `detected`, `all`), user or project scope, `--dry-run`, skill folders or the host's own plugin and
+  extension commands. Installed copies carry a stamp with every file's hash: update and uninstall touch only
+  unmodified copies they installed, refuse otherwise, and `--force` moves to a backup instead of deleting.
+  `doctor` checks Python, packages, Chromium and the store, and lists every copy each host can see, flagging
+  duplicates. `install.sh` / `install.ps1` wrap it and still default to Claude Code.
+- Installs straight from GitHub where the host supports it (`--from github`): Gemini CLI installs the repository as
+  an extension (a generated root `gemini-extension.json`) without the trust-this-folder question it asks for
+  local folders; Copilot installs `design-dna@design-dna` through the repository's own marketplace instead of the
+  direct path installs it is deprecating. The Copilot download is now a marketplace with the plugin inside.
+  `.claude-plugin` manifests and `gemini-extension.json` follow `VERSION`.
+- `docs/hosts/EVIDENCE.md`: AI-host results (Claude Code verified end to end in two fresh sessions; Codex, Gemini
+  CLI, Copilot and OpenCode discovery verified with their own CLIs) kept separate from operating-system results.
+- `hosts/tests/`: installer and package tests for every target, and a host-discovery script that asks each host
+  CLI what it sees.
+- **Portable font set** for the acceptance suite (`tests/fixtures/fontset.py`, `tests/fonts/`): Liberation Sans/Serif
+  Bold, DejaVu Sans/Serif Bold, Carlito Bold, Caladea Bold, Amiri Bold and Open Sans [wdth,wght], unmodified, with
+  their SIL OFL 1.1 / Bitstream Vera licences and sha256 list. Every font role (the layered reference's sans and
+  serif, the candidate lists, the Arabic + Latin font, T02's non-candidate caption face, T27's variable `wdth` font)
+  comes from the set, and the expected faces are read from the files instead of hard-coded names.
+  Windows machines with Arial and Georgia keep the verified `windows` set; elsewhere `portable` is used;
+  `DESIGN_DNA_FONTSET` forces either. `report.json` records the set and the faces behind each role.
+- CI job `acceptance-linux` (ubuntu-latest, `requirements-lock.txt`, portable fonts, its own evidence artifact).
+
+### Changed
+- `SKILL.md` declares `license` and `compatibility` (Agent Skills fields) and points at the repository for the
+  acceptance suite, which installed copies leave out.
+- `docs/CHATGPT-WORK.md` (an untested adaptation note) is replaced by `docs/hosts/chatgpt.md`.
+- T02's caption baselines are held at the ink measurement and only size and x are render-fitted. The model's
+  provenance already declared the baseline as measured from ink; fitting it against a substitute font had moved
+  it by up to 1 px towards the substitute's glyph shapes.
+- T21 uses any second installed browser channel (Edge, Chrome or Playwright's Chromium) for the real drift check,
+  not only Edge; with none it stays unverified.
+- `annotate_scan.py` no longer crashes on text nodes whose baseline is not measured yet (found by the Claude Code
+  end-to-end run).
+- Renderer on Linux: text is now rasterised the same way everywhere. Chrome on Linux takes per-font hinting and
+  subpixel settings from fontconfig, and stock distributions (Ubuntu, GitHub's runners) turn on slight hinting that
+  `--font-render-hinting=none` does not override on every text path, so text in a full render and in a fitting page
+  differed: T01's CTA fit ended 1 px off and its region failed on `ubuntu-latest` only. The browser now gets a
+  fontconfig file that includes the system configuration and assigns antialiasing, no hinting and no subpixel order.
+  The policy is recorded in the render profile as `text_rendering` (a hard drift field for pins that record it).
+- T20 exports its font-referenced bundle to a folder of its own. With both bundles in one library, a lookup by
+  name returns the newest export, so whenever the second export landed in a later second T20 imported the
+  font-referenced bundle, which cannot import where its fonts are not installed (seen as a T20 crash cascading into
+  T21-T32 on Linux). Library lookups (`fetch`, `bundle.py get`) also break same-second ties in favour of the
+  self-contained bundle instead of file-name order.
+- T20 resolves the font-referenced bundle's fonts from the font set's folder (`font_dirs`) as well as the system
+  font folders.
+- T01 also checks the CTA's horizontal position (within 1 px, like the label and headline), and a failed
+  `editable_close` verdict now reports each failed region's SSIM, the fitted text parameters and the renderer.
+- A crashed demonstration's console line now says why the engine refused (the transaction's conflicts and every
+  failing verification check), so a CI log explains it without downloading the evidence.
+
 ## [2.0.0] — 2026-10-06
 
 A complete, reviewable package: portable templates, an enforced renderer pin, scoped edits that cannot drift, a
