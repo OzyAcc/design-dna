@@ -133,6 +133,7 @@ def preview_png(bid: str, pid: str, conn=Depends(get_conn)) -> FileResponse:
 class DraftReq(BaseModel):
     pair_ids: list[str]
     slot_ids: Optional[list[str]] = None
+    confirm_new_paid_request: bool = False
 
 
 @router.post("/batches/{bid}/draft-copy")
@@ -144,6 +145,7 @@ def draft_copy(bid: str, body: DraftReq, conn=Depends(get_conn)):
         raise AppError("choose the outputs to draft copy for", "nothing_selected")
     for pid in body.pair_ids:
         batches.get_pair(conn, bid, pid)
+    jobs.guard_paid_retry(conn, jobs.latest(conn, "batch.draft_copy", batch_id=bid), body.confirm_new_paid_request)
     return jobs.public(jobs.enqueue(conn, "batch.draft_copy", {"batch_id": bid, "pair_ids": body.pair_ids, "slot_ids": body.slot_ids},
                                     priority=3, batch_id=bid))
 

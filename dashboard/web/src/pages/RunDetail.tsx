@@ -1,8 +1,8 @@
 // Run review: gallery + per-output detail with the actual render, the text used, checks and limitations.
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, download, MODES, type Output } from "../api";
-import { Dev, errText, Events, fmtBytes, newKey, STATUS_LABEL, StatusDot, useToast } from "../lib";
+import { api, ApiError, download, MODES, type Output } from "../api";
+import { Dev, errText, Events, fmtBytes, newKey, readLocal, STATUS_LABEL, StatusDot, useToast, writeLocal } from "../lib";
 
 type RunRes = { id: string; name: string; status: string; counts: Record<string, number>; outputs: Output[]; created_at: string };
 
@@ -64,11 +64,11 @@ export default function RunDetail() {
 
 function TextCheck({ t }: { t: any }) {
   if (!t) return null;
-  const pairs = (m: Record<string, string>) => Object.entries(m || {}).map(([k, v]) => <li key={k}><strong>{k}</strong>: <span dir="auto">{v}</span></li>);
+  const list = (xs: { slot_id: string; role: string; value: string }[]) => (xs || []).map((x) => <li key={x.slot_id}><strong>{x.role}</strong>: <span dir="auto" style={{ whiteSpace: "pre-wrap" }}>{x.value}</span></li>);
   return <>
-    <dt>Text</dt><dd>{t.policy === "overlay" ? <>live text over the artwork, rendered by the engine<ul className="tight">{pairs(t.live_text)}</ul></>
-      : t.policy === "in_image" ? <>drawn by the image model — <strong>not checked automatically</strong>; it should read<ul className="tight">{pairs(t.requested)}</ul></>
-      : "imagery only (no text was requested; chosen before submission)"}</dd>
+    <dt>Text</dt><dd>{t.policy === "overlay" ? <>live text over the artwork, rendered by the engine<ul className="tight">{list(t.live_text)}</ul></>
+      : t.policy === "in_image" ? <>drawn by the image model — <strong>not checked automatically</strong>; it should read<ul className="tight">{list(t.requested)}</ul></>
+      : t.legacy ? "no text was requested (submitted before text policies existed)" : "imagery only (no text was requested; chosen before submission)"}</dd>
   </>;
 }
 
@@ -119,15 +119,26 @@ function OutputDrawer({ id, onClose, onChanged, onOpen }: { id: string; onClose:
   const png = o.files.find((f) => f.kind === "png");
   const refused = o.files.find((f) => f.kind === "refused_candidate");
   const textToConfirm = o.checks?.text?.policy === "in_image";
+  // imagery only (or a creative output from before text policies): its copy never reaches the image
+  const copyUnused = o.mode === "creative" && (o.inputs?.creative_text || "none") === "none";
   const review = async (state: string) => { try { setO(await api.post<Output>(`/api/outputs/${o.id}/review`, { state, confirm_text: state === "approved" && textChecked })); onChanged(); } catch (e) { toast(errText(e), true); } };
   const retry = async (revise: boolean, confirm = false): Promise<void> => {
     setBusy(true);
     const changed = revise ? Object.fromEntries(Object.entries(edit).filter(([k, v]) => v !== ((o.inputs?.slots || []).find((s: any) => s.slot_id === k)?.value ?? ""))) : undefined;
+    // one identity per retry intent, kept until the server answers: a retry whose answer was lost is sent again with the
+    // same key (the server returns the revision it made), never as a second paid request
+    const slot = `dna.retry.${o.id}`, what = JSON.stringify(changed ?? null);
+    const prev = readLocal<{ key: string; what: string } | null>(slot, null);
+    const key = prev && prev.what === what ? prev.key : newKey();
+    writeLocal(slot, { key, what });
     try {
-      const r = await api.post<any>(`/api/outputs/${o.id}/retry`, { copy: changed, idempotency_key: newKey(), confirm_new_paid_request: confirm });
-      toast(`Revision ${r.revision} queued`); onChanged(); onOpen(r.output_id);
+      const r = await api.post<any>(`/api/outputs/${o.id}/retry`, { copy: changed, idempotency_key: key, confirm_new_paid_request: confirm });
+      writeLocal(slot, null);
+      toast(r.duplicate ? "That retry was already received — opening it" : `Revision ${r.revision} queued`); onChanged(); onOpen(r.output_id);
     } catch (e: any) {
-      if (e.code === "confirm_paid_retry" && window.confirm(`${e.message}\n\nSend a new request anyway?`)) { setBusy(false); return retry(revise, true); }
+      if (e instanceof ApiError && e.code === "confirm_paid_retry" && window.confirm(`${e.message}\n\nSend a new request anyway?`)) { setBusy(false); return retry(revise, true); }
+      if (e instanceof ApiError && e.code === "retry_in_progress") { writeLocal(slot, null); toast("A retry of this output is already queued — opening it"); onChanged(); onOpen(String((e.detail as any).output_id)); return; }
+      if (e instanceof ApiError && ["still_running", "required_slot", "locked_slot", "not_found", "confirm_paid_retry"].includes(e.code)) writeLocal(slot, null);
       toast(errText(e), true);
     } finally { setBusy(false); }
   };
@@ -159,10 +170,10 @@ function OutputDrawer({ id, onClose, onChanged, onOpen }: { id: string; onClose:
             {o.error && <div className={`notice ${o.status === "failed" ? "bad" : "warn"} small`}><strong>{o.error.kind === "conflict" ? "Conflict" : o.error.kind === "provider" ? "Provider" : o.error.kind === "infrastructure" ? "Infrastructure"
                 : o.error.kind === "renderer_drift" ? "Renderer changed" : o.error.kind === "baseline_not_reproduced" ? "Baseline not reproduced" : o.error.kind === "interrupted" ? "Interrupted" : "Problem"}:</strong> {o.error.message}
               {o.error.conflicts && <ul className="tight">{o.error.conflicts.slice(0, 6).map((c: any, i: number) => <li key={i}>{c.message || c.problem || c.constraint || c.lock || JSON.stringify(c).slice(0, 140)}{c.detail?.options ? ` — options: ${c.detail.options.join("; ")}` : c.resolve ? ` — ${c.resolve}` : ""}</li>)}</ul>}</div>}
-            <div><span className="label">Text used</span>
+            <div><span className="label">{copyUnused ? "Copy (not used in this image)" : "Text used"}</span>
               {(o.inputs?.slots || []).map((s: any) => <div key={s.slot_id} className="field" style={{ marginBottom: 8 }}>
-                <span className="label">{s.role} <span className="slot-src">{s.hidden ? "hidden" : s.source}</span></span>
-                {s.locked?.length ? <p className="small">{s.value}</p> : <textarea rows={1} value={edit[s.slot_id] ?? ""} onChange={(e) => setEdit({ ...edit, [s.slot_id]: e.target.value })} dir="auto" />}
+                <span className="label">{s.role} <span className="slot-src">{copyUnused ? "not used: imagery only" : s.hidden ? "hidden" : s.source}</span></span>
+                {s.locked?.length || copyUnused ? <p className="small" style={copyUnused ? { opacity: 0.6 } : undefined}>{s.value}</p> : <textarea rows={1} value={edit[s.slot_id] ?? ""} onChange={(e) => setEdit({ ...edit, [s.slot_id]: e.target.value })} dir="auto" />}
               </div>)}
             </div>
             {o.inputs?.instructions?.length > 0 && <div><span className="label">Instructions</span><ul className="tight small">{o.inputs.instructions.map((x: string) => <li key={x}>{x}</li>)}</ul></div>}
@@ -178,7 +189,8 @@ function OutputDrawer({ id, onClose, onChanged, onOpen }: { id: string; onClose:
             </div>
             <div className="row">
               <button className="btn secondary small" disabled={busy || ["queued", "running"].includes(o.status)} onClick={() => retry(false)}>Retry this output</button>
-              <button className="btn secondary small" disabled={busy || ["queued", "running"].includes(o.status)} onClick={() => retry(true)}>Regenerate with revised text</button>
+              <button className="btn secondary small" disabled={busy || copyUnused || ["queued", "running"].includes(o.status)} onClick={() => retry(true)}
+                      title={copyUnused ? "This output generates imagery only: its copy is not used" : undefined}>Regenerate with revised text</button>
             </div>
             <p className="small muted">Retries and regenerations create a new revision; this one is kept. <Link to={`/templates/${o.template_id}`}>Open the template</Link></p>
             <Events job={o.events ? { events: o.events } as any : null} />

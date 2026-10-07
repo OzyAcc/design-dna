@@ -15,7 +15,7 @@ import json
 from PIL import Image
 
 from .. import config
-from .base import Provider, ProviderError
+from .base import GATEWAY_TIMEOUTS, Provider, ProviderError
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 MAX_EDGE = 1568  # images are sent at most this size on the long edge; boxes are scaled back to canvas pixels
@@ -126,6 +126,9 @@ def _classify(e) -> ProviderError:
     if isinstance(e, (anthropic.APITimeoutError, anthropic.APIConnectionError)):
         return ProviderError(name, "unknown_outcome", "the connection to Anthropic failed before a response arrived; the request "
                                                       "may or may not have been processed", {"error": type(e).__name__})
+    if isinstance(e, anthropic.APIStatusError) and e.status_code in GATEWAY_TIMEOUTS:
+        return ProviderError(name, "unknown_outcome", f"Anthropic's gateway timed out (HTTP {e.status_code}); the request may still have "
+                                                      "been processed", {"status": e.status_code})
     if isinstance(e, anthropic.APIStatusError):
         kind = "unavailable" if e.status_code >= 500 else "bad_request"
         return ProviderError(name, kind, f"Anthropic API error {e.status_code}", {"status": e.status_code, "message": str(e)[:400]})

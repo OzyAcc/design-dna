@@ -58,10 +58,29 @@ export function errText(e: unknown): string {
 // State kept in this browser's storage. A change is written to storage at once (not when React next renders), so it
 // survives the page closing right after, and a change made after the component has gone (a late acknowledgement) still
 // reaches storage.
+/** The value stored now (another tab may have written it since this page loaded). */
+export function readLocal<T>(key: string, initial: T): T {
+  try { const s = localStorage.getItem(key); return s ? (JSON.parse(s) as T) : initial; } catch { return initial; }
+}
+
+export function writeLocal<T>(key: string, value: T | null): void {
+  try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ }
+}
+
+/** POST a request that sends a paid provider request; if the previous attempt's outcome may have been billed, ask first. */
+export async function postPaid<T>(path: string, body: Record<string, unknown>): Promise<T | null> {
+  try { return await api.post<T>(path, body); }
+  catch (e) {
+    if (e instanceof ApiError && e.code === "confirm_paid_retry") {
+      if (!window.confirm(`${e.message}\n\nSend a new request anyway?`)) return null;
+      return api.post<T>(path, { ...body, confirm_new_paid_request: true });
+    }
+    throw e;
+  }
+}
+
 export function useLocal<T>(key: string, initial: T): [T, (v: T | ((p: T) => T)) => void] {
-  const [v, setV] = useState<T>(() => {
-    try { const s = localStorage.getItem(key); return s ? (JSON.parse(s) as T) : initial; } catch { return initial; }
-  });
+  const [v, setV] = useState<T>(() => readLocal(key, initial));
   const cur = useRef(v);
   const set = useCallback((x: T | ((p: T) => T)) => {
     const next = typeof x === "function" ? (x as (p: T) => T)(cur.current) : x;

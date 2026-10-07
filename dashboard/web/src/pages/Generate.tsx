@@ -3,11 +3,15 @@
 // Every change goes through one serial write queue: Generate (and previews, AI drafting) first wait until the server has
 // acknowledged everything typed or chosen, so the frozen snapshot is exactly what was reviewed.
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useBlocker, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiError, CREATIVE_TEXT, MODES, type Matrix, type Pair, type Product, type ResolvedSlot, type Template } from "../api";
 import { useComposer } from "../components/Composer";
-import { Dev, errText, JobLine, newKey, StatusDot, useJob, useLocal, useToast } from "../lib";
-import { WriteQueue } from "../writes";
+import { Dev, errText, JobLine, newKey, postPaid, readLocal, StatusDot, useJob, useLocal, useToast } from "../lib";
+import { NotReplayable, WriteQueue, type WriteOpts } from "../writes";
+
+// Answers to a submission that say nothing was created with its key (anything else, e.g. a sign-in or proxy error,
+// says nothing about an earlier attempt, so the key is kept and the next Generate retries the same submission)
+const SUBMIT_ANSWERED = ["submission_changed", "preflight_failed", "nothing_to_generate", "missing_idempotency_key", "not_found"];
 
 export default function Generate() {
   const [params, setParams] = useSearchParams();
@@ -33,11 +37,18 @@ function BatchComposer({ bid }: { bid: string }) {
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
   const toast = useToast();
-  const q = useMemo(() => new WriteQueue((key, e) => { if (!key.startsWith("load")) toast(`Not saved: ${errText(e)}`, true); }), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const reload = useRef<() => void>(() => {});
+  // a failed choice or action is shown as it is on the server (reloaded), never replayed unseen; typed text is kept and retried
+  const q = useMemo(() => new WriteQueue((key, e, o) => {
+    if (key.startsWith("load")) return;
+    toast(`Not saved: ${errText(e)}`, true);
+    if (o.once && !o.read) reload.current();
+  }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [, bump] = useState(0);
   useEffect(() => q.subscribe(() => bump((x) => x + 1)), [q]);
   const setMatrix = (x: Matrix) => { mRef.current = x; setM(x); };
   const load = () => q.run("load", () => api.get<Matrix>(`/api/batches/${bid}`).then((x) => { setMatrix(x); setErr(""); }), undefined, { read: true });
+  reload.current = () => { void load(); };
   useEffect(() => {
     api.get<Matrix>(`/api/batches/${bid}`).then((x) => { setMatrix(x); setErr(""); }).catch((e) => setErr(errText(e)));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -59,6 +70,15 @@ function BatchComposer({ bid }: { bid: string }) {
     window.addEventListener("beforeunload", warn);
     return () => { window.removeEventListener("beforeunload", warn); q.fireAll(); };
   }, [q]);
+  // leaving this page inside the app (a link, Back or Forward): save first; if something cannot be saved, ask
+  const blocker = useBlocker(({ currentLocation: a, nextLocation: b }) => (q.busy || q.failures.length > 0) && a.pathname + a.search !== b.pathname + b.search);
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    q.flush().then(() => blocker.proceed?.(), () => {
+      if (window.confirm("Some changes could not be saved. Copy you typed is kept in this browser and sent again when you come back; other changes would be lost. Leave anyway?")) blocker.proceed?.();
+      else blocker.reset?.();
+    });
+  }, [blocker.state]); // eslint-disable-line react-hooks/exhaustive-deps
   const dj = useJob(draftJob, (j) => { load(); toast(j.status === "completed" ? `${j.result?.drafts ?? 0} AI draft(s) ready to review` : "AI drafting did not complete", j.status !== "completed"); });
   const pairs = m?.pairs || [];
   const roles = useMemo(() => Array.from(new Set(pairs.flatMap((p) => (p.slots || []).map((s) => s.role)))), [pairs]);
@@ -67,16 +87,20 @@ function BatchComposer({ bid }: { bid: string }) {
   if (!m) return <p className="muted">Loading the batch…</p>;
   const b = m.batch;
   // every write reads the latest acknowledged revision when it is sent (writes are serial, so it is current)
-  const patchBatch = (key: string, changes: any) => q.run(`batch:${key}`, async () => {
+  // a choice made with a control that shows the server's value (`once`) is not retried later; typed fields are
+  const patchBatch = (key: string, changes: any, opts: WriteOpts = {}) => q.run(`batch:${key}`, async () => {
     try { setMatrix(await api.patch<Matrix>(`/api/batches/${b.id}`, { base_revision: mRef.current!.batch.revision, changes })); }
-    catch (e) { if (e instanceof ApiError && e.code === "stale_batch") void load(); throw e; }
-  });
-  const setPair = (pid: string, key: string, body: any) => q.run(`pair:${pid}:${key}`, async () => {
+    catch (e) {
+      if (e instanceof ApiError && e.code === "stale_batch") throw new NotReplayable(`${e.message} (the batch changed elsewhere and was reloaded: check it and redo this change)`);
+      throw e;
+    }
+  }, undefined, opts);
+  const setPair = (pid: string, key: string, body: any, opts: WriteOpts = {}) => q.run(`pair:${pid}:${key}`, async () => {
     setMatrix(await api.patch<Matrix>(`/api/batches/${b.id}/pairs/${pid}`, body));
-  });
+  }, undefined, opts);
   const flushOrSay = async (what: string) => {
     try { await q.flush(); return true; }
-    catch (e) { toast(`${what} stopped: some changes were not saved (${(e as Error).message}). Your text is kept in this browser; try again when the connection is back.`, true); return false; }
+    catch (e) { toast(`${what} stopped: some changes were not saved (${(e as Error).message}). Try again when the connection is back. Copy typed into outputs is also kept in this browser; other fields are not, so keep this page open.`, true); return false; }
   };
   const submit = async () => {
     setBusy(true);
@@ -86,16 +110,17 @@ function BatchComposer({ bid }: { bid: string }) {
       if (cur.counts.blocked > 0) { toast("Some outputs need attention before generating", true); return; }
       const imageryOnly = cur.pairs.filter((p) => p.included && p.mode === "creative" && p.creative_text === "none");
       if (imageryOnly.length && !window.confirm(`${imageryOnly.length} creative output(s) are imagery only: their copy will not appear in the image and no text is requested. Generate anyway?`)) return;
-      const key = submitKey || newKey();
+      const key = readLocal<string | null>(`dna.submit.${bid}`, null) || submitKey || newKey(); // shared with other tabs of this batch
       setSubmitKey(key); // stored before sending: if the response is lost, the same key retries the same submission
       try {
         const r = await api.post<any>(`/api/batches/${b.id}/submit`, { idempotency_key: key, name: cur.batch.name });
+        if (typeof r?.run_id !== "string") throw new Error("unexpected answer"); // e.g. a login portal's page: not the server's answer
         setSubmitKey(null);
         toast(r.duplicate ? "That submission was already received — opening its run" : `Submitted ${r.outputs} output(s)`);
         nav(`/runs/${r.run_id}`);
       } catch (e) {
-        if (e instanceof ApiError && e.status < 500) {
-          setSubmitKey(null); // the server answered: nothing was created with this key
+        if (e instanceof ApiError && SUBMIT_ANSWERED.includes(e.code)) {
+          setSubmitKey(null); // the server answered this submission: nothing (new) was created with this key
           if (e.code === "submission_changed") setRecovered({ run_id: String((e.detail as any).run_id), changed: true });
           toast(errText(e), true);
           void load();
@@ -145,22 +170,22 @@ function BatchComposer({ bid }: { bid: string }) {
           <h3>Batch defaults <span className="muted small">apply to every output unless a later layer sets a value</span></h3>
           <div className="row" style={{ marginBottom: 12 }}>
             <div className="seg" role="group" aria-label="Default mode">{Object.entries(MODES).map(([k, l]) => (
-              <button key={k} aria-pressed={(b.defaults.mode || "adapt") === k} onClick={() => patchBatch("defaults.mode", { defaults: { mode: k } })}>{l}</button>))}</div>
+              <button key={k} aria-pressed={(b.defaults.mode || "adapt") === k} onClick={() => patchBatch("defaults.mode", { defaults: { mode: k } }, { once: true })}>{l}</button>))}</div>
           </div>
           {anyCreative && (
             <div className="row" style={{ marginBottom: 12 }}>
               <div className="seg" role="group" aria-label="Text in creative artwork">{Object.entries(CREATIVE_TEXT).map(([k, l]) => (
-                <button key={k} aria-pressed={(b.defaults.creative_text || "overlay") === k} onClick={() => patchBatch("defaults.creative_text", { defaults: { creative_text: k } })}>{l}</button>))}</div>
+                <button key={k} aria-pressed={(b.defaults.creative_text || "overlay") === k} onClick={() => patchBatch("defaults.creative_text", { defaults: { creative_text: k } }, { once: true })}>{l}</button>))}</div>
             </div>
           )}
           {b.defaults.mode !== "adapt" && !m.providers.image_generation && <div className="notice warn small" style={{ marginBottom: 10 }}>No image provider is configured: creative modes are blocked. <Link to="/settings">Settings</Link></div>}
           <div className="row" style={{ marginBottom: 12 }}>
             <div className="seg" role="group" aria-label="Default language">
-              <button aria-pressed={(b.defaults.language || "en") === "en"} onClick={() => patchBatch("defaults.language", { defaults: { language: "en" } })}>English</button>
-              <button aria-pressed={b.defaults.language === "ar"} onClick={() => patchBatch("defaults.language", { defaults: { language: "ar" } })}>العربية Arabic</button>
+              <button aria-pressed={(b.defaults.language || "en") === "en"} onClick={() => patchBatch("defaults.language", { defaults: { language: "en" } }, { once: true })}>English</button>
+              <button aria-pressed={b.defaults.language === "ar"} onClick={() => patchBatch("defaults.language", { defaults: { language: "ar" } }, { once: true })}>العربية Arabic</button>
             </div>
             {(b.defaults.language === "ar" || pairs.some((p) => p.pair_language === "ar")) && (
-              <select aria-label="Arabic font" value={b.defaults.arabic_font || ""} onChange={(e) => patchBatch("defaults.arabic_font", { defaults: { arabic_font: e.target.value || null } })}>
+              <select aria-label="Arabic font" value={b.defaults.arabic_font || ""} onChange={(e) => patchBatch("defaults.arabic_font", { defaults: { arabic_font: e.target.value || null } }, { once: true })}>
                 <option value="">Choose an Arabic-capable font…</option>
                 {fonts.map((f) => <option key={f.sha256} value={f.sha256}>{f.names.full}</option>)}
               </select>
@@ -177,7 +202,7 @@ function BatchComposer({ bid }: { bid: string }) {
           <h4>Draft copy with AI</h4>
           <p className="small muted">Claude drafts copy for the selected outputs (or all included). Drafts appear beside each field; nothing you typed is replaced, and a draft is unapproved until you review it.</p>
           <button className="btn secondary small" disabled={!m.providers.copy}
-                  onClick={async () => { if (!(await flushOrSay("Drafting"))) return; try { const j = await api.post<any>(`/api/batches/${b.id}/draft-copy`, { pair_ids: selRows.length ? selRows : included.map((p) => p.pair_id) }); setDraftJob(j.id); } catch (e) { toast(errText(e), true); } }}>
+                  onClick={async () => { if (!(await flushOrSay("Drafting"))) return; try { const j = await postPaid<any>(`/api/batches/${b.id}/draft-copy`, { pair_ids: selRows.length ? selRows : included.map((p) => p.pair_id) }); if (j) setDraftJob(j.id); } catch (e) { toast(errText(e), true); } }}>
             Draft copy for {selRows.length || included.length} output(s)</button>
           {!m.providers.copy && <span className="small muted"> — needs a Claude key (<Link to="/settings">Settings</Link>)</span>}
           {m.providers.copy?.mock && <span className="tag bad" style={{ marginLeft: 8 }}>mock</span>}
@@ -242,8 +267,10 @@ function BulkApply({ m, roles, products, templates, selected, q, onDone }: { m: 
   const go = () => {
     const [kind, ident] = scope.split(":");
     const sc = kind === "all" ? { kind } : kind === "product" ? { kind, product_id: ident } : kind === "template" ? { kind, template_id: ident } : { kind: "pairs", pair_ids: selected };
-    void q.run(`bulk:${scope}:${role}`, async () => { onDone(await api.post<Matrix>(`/api/batches/${m.batch.id}/apply`, { scope: sc, copy: { [role]: val } })); },
-      (ok) => { if (ok) toast("Applied — outputs you edited by hand keep their text"); });
+    // the key names the field written (all outputs = the batch default the field above edits too), so the newest wins
+    const key = kind === "all" ? `batch:defaults.copy.${role}` : kind === "pairs" ? `bulk:pairs:${[...selected].sort().join(",")}:${role}` : `bulk:${scope}:${role}`;
+    void q.run(key, async () => { onDone(await api.post<Matrix>(`/api/batches/${m.batch.id}/apply`, { scope: sc, copy: { [role]: val } })); },
+      (ok) => { if (ok) toast("Applied — outputs you edited by hand keep their text"); }, { once: true });
   };
   return (
     <div className="stack">
@@ -273,7 +300,8 @@ function SlotEditor({ s, q, wkey, save, onUseDraft, onApprove, unsentKey }: {
   const [stored, setUnsent] = useLocal<Draft>(unsentKey, null);
   const draft = asDraft(stored);
   const [v, setV] = useState(draft ? (draft.v ?? s.value ?? "") : (s.value ?? ""));
-  useEffect(() => { if (!draft) setV(s.value ?? ""); }, [s.value]); // eslint-disable-line react-hooks/exhaustive-deps
+  // show the server's value whenever nothing of ours is pending (also after an explicit choice that did not change it)
+  useEffect(() => { if (!draft) setV(s.value ?? ""); }, [s.value, !!draft]); // eslint-disable-line react-hooks/exhaustive-deps
   const ackFor = (value: string | null) => (ok: boolean) => { if (ok) setUnsent((cur) => (asDraft(cur)?.v === value ? null : cur)); };
   const commit = (value: string | null, debounce: boolean) => {
     setUnsent({ v: value });
@@ -311,14 +339,14 @@ function SlotEditor({ s, q, wkey, save, onUseDraft, onApprove, unsentKey }: {
           {isManual && <button className="btn ghost small" onClick={() => commit(null, false)}>Use inherited value</button>}
           {!s.required && <button className="btn ghost small" onClick={() => { setV(""); commit("", false); }}>Leave empty</button>}
           {s.template_text && v !== s.template_text && <button className="btn ghost small" onClick={() => { setV(s.template_text || ""); commit(s.template_text || "", false); }}>Use reference text</button>}
-          {s.source === "AI draft" && !s.approved && <button className="btn small" onClick={() => void q.run(`${wkey}:approve`, onApprove)}>Approve AI draft</button>}
+          {s.source === "AI draft" && !s.approved && <button className="btn small" onClick={() => void q.run(`${wkey}:approve`, onApprove, undefined, { once: true })}>Approve AI draft</button>}
           <span className="muted">{(v || "").replace(/\n/g, "").length} chars</span>
         </div>
       )}
       {s.ai_draft && s.ai_draft.value !== s.value && (
         <div className="draft-box"><span className="label">AI draft{s.ai_draft.mock ? " (mock)" : ""}</span><div style={{ whiteSpace: "pre-wrap" }}>{s.ai_draft.value || <em>empty — {s.ai_draft.note}</em>}</div>
           <button className="btn secondary small" style={{ marginTop: 6 }}
-                  onClick={() => { setUnsent(null); void q.run(wkey, onUseDraft); }}>Use this draft (replaces this output’s text)</button></div>
+                  onClick={() => { setUnsent(null); q.forget(wkey); void q.run(wkey, onUseDraft, undefined, { once: true }); }}>Use this draft (replaces this output’s text)</button></div>
       )}
       {s.problems.map((x) => <div key={x} className="small" style={{ color: "var(--crimson-ink)" }}>{x}</div>)}
     </div>
@@ -327,7 +355,7 @@ function SlotEditor({ s, q, wkey, save, onUseDraft, onApprove, unsentKey }: {
 
 function OutputEditor({ p, batchId, product, template, selected, onSelect, setPair, q, reload, onMatrix, flushOrSay }: {
   p: Pair; batchId: string; product?: Product; template?: Template; selected: boolean; onSelect: (on: boolean) => void;
-  setPair: (pid: string, key: string, body: any) => Promise<void | undefined>; q: WriteQueue; reload: () => void; onMatrix: (m: Matrix) => void;
+  setPair: (pid: string, key: string, body: any, opts?: WriteOpts) => Promise<void | undefined>; q: WriteQueue; reload: () => void; onMatrix: (m: Matrix) => void;
   flushOrSay: (what: string) => Promise<boolean>;
 }) {
   const [jobId, setJobId] = useState<string | null>(null);
@@ -360,20 +388,20 @@ function OutputEditor({ p, batchId, product, template, selected, onSelect, setPa
             <span className="tag">v{p.template?.number}</span>{p.variant_index > 0 && <span className="tag">variant {p.variant_index + 1}</span>}
           </div>
           <div className="row">
-            <label className="check small"><input type="checkbox" checked={p.included} onChange={(e) => setPair(p.pair_id, "included", { included: e.target.checked })} /> Include</label>
-            <button className="btn ghost small" onClick={() => void q.run(`variant:${p.pair_id}`, async () => { onMatrix(await api.post<Matrix>(`/api/batches/${batchId}/variants`, { product_id: p.product_id, template_id: p.template_id })); })}>+ Variant</button>
+            <label className="check small"><input type="checkbox" checked={p.included} onChange={(e) => setPair(p.pair_id, "included", { included: e.target.checked }, { once: true })} /> Include</label>
+            <button className="btn ghost small" onClick={() => void q.run(`variant:${p.pair_id}`, async () => { onMatrix(await api.post<Matrix>(`/api/batches/${batchId}/variants`, { product_id: p.product_id, template_id: p.template_id })); }, undefined, { once: true })}>+ Variant</button>
           </div>
         </div>
         <div className="row small">
-          <select aria-label="Mode" value={p.pair_mode || ""} onChange={(e) => setPair(p.pair_id, "mode", { mode: e.target.value || null })}>
+          <select aria-label="Mode" value={p.pair_mode || ""} onChange={(e) => setPair(p.pair_id, "mode", { mode: e.target.value || null }, { once: true })}>
             <option value="">Mode: batch default ({MODES[p.mode] ? p.mode : "adapt"})</option>
             {Object.entries(MODES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
           {p.mode === "creative" && (
-            <select aria-label="Text in this artwork" value={p.pair_creative_text || ""} onChange={(e) => setPair(p.pair_id, "creative_text", { creative_text: e.target.value || null })}>
+            <select aria-label="Text in this artwork" value={p.pair_creative_text || ""} onChange={(e) => setPair(p.pair_id, "creative_text", { creative_text: e.target.value || null }, { once: true })}>
               <option value="">Text: batch default ({CREATIVE_TEXT[p.creative_text || "overlay"]})</option>
               {Object.entries(CREATIVE_TEXT).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
           )}
-          <select aria-label="Language" value={p.pair_language || ""} onChange={(e) => setPair(p.pair_id, "language", { language: e.target.value || null })}>
+          <select aria-label="Language" value={p.pair_language || ""} onChange={(e) => setPair(p.pair_id, "language", { language: e.target.value || null }, { once: true })}>
             <option value="">Language: batch default ({p.language})</option><option value="en">English</option><option value="ar">Arabic</option></select>
           <span className="muted">{p.template?.canvas?.width} × {p.template?.canvas?.height} px</span>
         </div>
@@ -383,7 +411,7 @@ function OutputEditor({ p, batchId, product, template, selected, onSelect, setPa
             {[...p.version_check.missing_slots, ...p.version_check.changed_slots].map((s: string) => (
               <div key={s} className="row" style={{ marginTop: 4 }}><code>{s}</code> →
                 <input type="text" placeholder="new slot id, or leave empty to drop" value={mapping[s] ?? ""} onChange={(e) => setMapping({ ...mapping, [s]: e.target.value || null })} style={{ maxWidth: 260 }} /></div>))}
-            <button className="btn small" style={{ marginTop: 6 }} onClick={() => void q.run(`confirm-version:${p.pair_id}`, async () => { onMatrix(await api.post<Matrix>(`/api/batches/${batchId}/pairs/${p.pair_id}/confirm-version`, { mapping })); })}>Confirm mapping</button>
+            <button className="btn small" style={{ marginTop: 6 }} onClick={() => { q.fireAll(); void q.run(`confirm-version:${p.pair_id}`, async () => { onMatrix(await api.post<Matrix>(`/api/batches/${batchId}/pairs/${p.pair_id}/confirm-version`, { mapping })); }, undefined, { once: true }); }}>Confirm mapping</button>
           </div>
         )}
         {(p.slots || []).map((s) => (

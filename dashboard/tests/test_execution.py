@@ -201,6 +201,31 @@ def requests_of(oid):
     return [(q["provider"], q["status"]) for q in ok(client.get(f"/api/outputs/{oid}"))["provider_requests"]]
 
 
+def locked_template():
+    """The base poster rebuilt as its own template with a hard lock on the background."""
+    if "locked" in _T:
+        return _T["locked"]
+    png, els = fixtures.poster()
+    a = S.upload(png, "inspiration", "locked.png")["assets"][0]
+    t = ok(client.post("/api/templates", json={"asset_id": a["id"], "name": "Background locked"}))
+    t = ok(client.patch(f"/api/templates/{t['id']}/draft", json={"base_revision": t["draft_revision"], "changes": {
+        "draft": {"elements": els, "review_confirmed": True}}}))
+    ok(client.post(f"/api/templates/{t['id']}/measure"))
+    S.drain()
+    slots = {x["role"]: x["id"] for x in ok(client.get(f"/api/templates/{t['id']}/model?source=work"))["scene"]["slots"]}
+    t = ok(client.get(f"/api/templates/{t['id']}"))
+    ok(client.put(f"/api/templates/{t['id']}/rules", json={"base_revision": t["draft_revision"], "review_confirmed": True,
+                                                         "slots": [{"id": slots["headline"], "required": True, "max_lines": 2}],
+                                                         "locks": [{"target": "background", "kind": "property", "hard": True}]}))
+    ok(client.post(f"/api/templates/{t['id']}/rebuild", json={"mode": "editable"}))
+    S.drain()
+    st = ok(client.get(f"/api/templates/{t['id']}"))["draft"]["staged"]
+    ok(client.post(f"/api/templates/{t['id']}/accept", json={"stage_id": st["stage_id"], "note": "locked background"}))
+    S.drain()
+    _T["locked"] = ok(client.get(f"/api/templates/{t['id']}"))["current_version"]
+    return _T["locked"]
+
+
 class T18Creative(unittest.TestCase):
     def test_overlay_renders_each_outputs_reviewed_copy_as_live_text(self):
         """Audit D4: creative mode uses the reviewed copy. The default policy draws it as the template's live text over
@@ -221,7 +246,7 @@ class T18Creative(unittest.TestCase):
             self.assertEqual(ch["path"], "creative_overlay")
             self.assertIn(ch["verification_status"], ("pass", "pass_with_unknowns"), ch)
             self.assertEqual(ch["text"]["policy"], "overlay")
-            self.assertEqual(ch["text"]["live_text"]["headline"], want)
+            self.assertEqual([x["value"] for x in ch["text"]["live_text"] if x["role"] == "headline"], [want])
             self.assertEqual(ch["svg"]["roundtrip"], "pass")
             kinds = [f["kind"] for f in o["files"]]
             for k in ("png", "svg", "svg_manifest"):
@@ -242,7 +267,7 @@ class T18Creative(unittest.TestCase):
             self.assertTrue(close(pixel(png, (120, 64)), fixtures.ACCENT), "the template's own shapes are drawn over the artwork")
             colour = {ps[0]["id"]: (120, 140, 100), ps[1]["id"]: (150, 110, 70)}[o["product_id"]]
             self.assertTrue(close(pixel(png, (400, 450)), colour, 40), "the canvas shows this product's generated artwork, not the template photo")
-            seen[o["product_id"]] = {"headline": ch["text"]["live_text"]["headline"], "verification": ch["verification_status"]}
+            seen[o["product_id"]] = {"headline": want, "verification": ch["verification_status"]}
         S.record("D4.overlay", {"outputs": seen, "provider_requests_each": 1})
 
     def test_in_image_and_imagery_only_policies(self):
@@ -277,7 +302,7 @@ class T18Creative(unittest.TestCase):
         self.assertEqual((a["inputs"]["creative_text"], a["checks"]["text"]["policy"]), ("in_image", "in_image"))
         self.assertIn('headline: "Made for / slow mornings"', a["provenance"]["prompt"], "the exact reviewed copy is requested")
         self.assertNotIn("Do not add any text", a["provenance"]["prompt"])
-        self.assertEqual(a["checks"]["text"]["requested"]["headline"], texts[ps[0]["id"]])
+        self.assertEqual([x["value"] for x in a["checks"]["text"]["requested"] if x["role"] == "headline"], [texts[ps[0]["id"]]])
         self.assertTrue(any("drawn by the image model" in x for x in a["limitations"]))
         blind = client.post(f"/api/outputs/{a['id']}/review", json={"state": "approved"})
         self.assertEqual((blind.status_code, blind.json()["error"]["code"]), (409, "confirm_text"), "raster text needs a person to check it")
@@ -287,10 +312,36 @@ class T18Creative(unittest.TestCase):
         self.assertNotIn("Never shown", b["provenance"]["prompt"], "unused copy never reaches the provider")
         self.assertTrue(any("imagery only" in x for x in b["limitations"]))
         ok(client.post(f"/api/outputs/{b['id']}/review", json={"state": "approved"}))
+        hs = next(e for e in b["inputs"]["slots"] if e["role"] == "headline")["slot_id"]
+        unused = client.post(f"/api/outputs/{b['id']}/retry", json={"idempotency_key": "t18-unused", "copy": {hs: "Revised"}})
+        self.assertEqual((unused.status_code, unused.json()["error"]["code"]), (400, "copy_not_used"), "no paid request for copy it ignores")
+        from dna_dashboard import exports
+        entry = exports.output_manifest_entry(S.db.one(S.db.connect(), "SELECT * FROM outputs WHERE id = ?", (b["id"],)))
+        self.assertEqual((entry["text_policy"], {c["used"] for c in entry["copy"]}), ("none", {False}), "the manifest says the copy is not in the image")
+        conn = S.db.connect()  # an output frozen before text policies existed: retried, it still says so
+        legacy = {k: v for k, v in b["inputs"].items() if k != "creative_text"}
+        with S.db.tx(conn):
+            S.db.update(conn, "outputs", b["id"], {"inputs": legacy})
+        rt = ok(client.post(f"/api/outputs/{b['id']}/retry", json={"idempotency_key": "t18-legacy"}))
+        S.drain()
+        lo = ok(client.get(f"/api/outputs/{rt['output_id']}"))
+        self.assertEqual((lo["status"], lo["checks"]["text"].get("legacy")), ("completed", True), lo.get("error"))
+        self.assertFalse(any("chosen before submission" in x for x in lo["limitations"]), "nobody chose imagery only for it")
         from dna_dashboard.handlers.output_jobs import creative_policy
         self.assertEqual(creative_policy({"slots": []}), "none", "outputs frozen before policies existed keep their no-text request")
         S.record("D4.in_image_none", {"in_image": {"prompt_has_copy": True, "approve_without_confirm": 409},
                                       "none": {"slots_unused": True, "prompt_has_copy": False}})
+
+    def test_imagery_only_is_not_blocked_by_copy_requirements(self):
+        v, ps = setup_shared()
+        m = batch(v, ps[:1], mode="creative", name="arabic imagery only", headline="مقعد من خشب\nالبلوط")
+        bid = m["batch"]["id"]
+        m = ok(client.patch(f"/api/batches/{bid}", json={"base_revision": m["batch"]["revision"], "changes": {"defaults": {"language": "ar"}}}))
+        self.assertTrue(any("Arabic needs a font" in x for x in m["pairs"][0]["problems"]), "live text over artwork needs the font")
+        for policy in ("none", "in_image"):
+            m = ok(client.patch(f"/api/batches/{bid}/pairs/{m['pairs'][0]['pair_id']}", json={"creative_text": policy}))
+            self.assertFalse(m["pairs"][0]["problems"], (policy, m["pairs"][0]["problems"]))
+        S.record("D4.unused_copy_requirements", {"none": "not blocked", "in_image": "not blocked", "overlay": "needs the Arabic font"})
 
     def test_creative_slot_is_labelled_generated(self):
         v, ps = setup_shared()
@@ -336,6 +387,36 @@ class T18Creative(unittest.TestCase):
             self.assertIn("nothing was requested from the image provider", o["error"]["message"])
             self.assertEqual(requests_of(o["id"]), [], f"{o['mode']}: no paid request before the pin check")
         S.record("T18.drift_before_paying", {"modes": ["creative", "creative_slot"], "provider_requests": 0})
+
+    def test_a_background_lock_is_refused_before_paying(self):
+        """The dry run replaces the background with a stand-in, so a lock on it refuses an overlay before the request."""
+        _, ps = setup_shared()
+        lv = locked_template()
+        r = submit(batch(lv, ps[:1], mode="creative", name="background lock"), "t18-bglock")
+        S.drain()
+        o = run(r["run_id"])["outputs"][0]
+        self.assertEqual((o["status"], o["error"]["kind"]), ("needs_review", "conflict"), o.get("error"))
+        self.assertIn("lock", json.dumps(o["error"]["conflicts"]).lower())
+        self.assertIn("nothing was requested from the provider", o["error"]["message"])
+        self.assertEqual(requests_of(o["id"]), [], "no paid request for artwork the template's lock would refuse")
+        S.record("T18.lock_before_paying", {"provider_requests": 0})
+
+    def test_copy_that_does_not_fit_is_refused_before_paying(self):
+        """Found by the container smoke run: without a fit preview, overflowing copy was refused by the engine only after
+        the artwork had been paid for. The transaction is now dry-run first with a stand-in for the paid image."""
+        v, ps = setup_shared()
+        m = batch(v, ps, mode="creative", name="overflow before paying", headline="A headline far too wide\nfor the box it has")
+        slot_pair = next(p for p in m["pairs"] if p["product_id"] == ps[1]["id"])
+        m = ok(client.patch(f"/api/batches/{m['batch']['id']}/pairs/{slot_pair['pair_id']}", json={"mode": "creative_slot"}))
+        self.assertEqual(m["counts"]["blocked"], 0, "no preview was run, so preflight cannot know yet")
+        r = submit(m, "t18-overflow")
+        S.drain()
+        for o in run(r["run_id"])["outputs"]:
+            self.assertEqual((o["status"], o["error"]["kind"]), ("needs_review", "conflict"), o["mode"])
+            self.assertIn("fit_conflict", json.dumps(o["error"]["conflicts"]), o["mode"])
+            self.assertIn("nothing was requested from the provider", o["error"]["message"])
+            self.assertEqual(requests_of(o["id"]), [], f"{o['mode']}: no paid request for copy that cannot fit")
+        S.record("T18.overflow_before_paying", {"modes": ["creative", "creative_slot"], "provider_requests": 0, "refusal": "fit_conflict"})
 
 
 class T19ProvidersMissingOrFailing(unittest.TestCase):
@@ -460,6 +541,9 @@ class T23PartialFailureRetryCancel(unittest.TestCase):
         rt = ok(client.post(f"/api/outputs/{bad['id']}/retry", json={"idempotency_key": "t23-retry-1", "confirm_new_paid_request": True}))
         again = ok(client.post(f"/api/outputs/{bad['id']}/retry", json={"idempotency_key": "t23-retry-1", "confirm_new_paid_request": True}))
         self.assertEqual((again["duplicate"], again["output_id"]), (True, rt["output_id"]), "a repeated click is not a second paid request")
+        other = client.post(f"/api/outputs/{bad['id']}/retry", json={"idempotency_key": "t23-retry-2", "confirm_new_paid_request": True})
+        self.assertEqual((other.status_code, other.json()["error"]["code"], other.json()["error"]["detail"]["output_id"]),
+                         (409, "retry_in_progress", rt["output_id"]), "a retry whose answer was lost, sent again with a new key")
         S.drain()
         o2 = ok(client.get(f"/api/outputs/{rt['output_id']}"))
         self.assertEqual((o2["status"], o2["revision"], o2["parent_output_id"]), ("completed", 2, bad["id"]))
@@ -537,6 +621,19 @@ class T29SubmissionIdentity(unittest.TestCase):
         self.assertEqual((got["run_id"], got["batch_id"]), (rid, bid), "a client can ask what its lost submission created")
         again = submit(m, "d2-key")
         self.assertEqual((again["run_id"], again["duplicate"]), (rid, True), "a retry after a lost response is the same run")
+        j = ok(client.post(f"/api/batches/{bid}/draft-copy", json={"pair_ids": [m["pairs"][0]["pair_id"]]}))
+        self.assertTrue(S.worker.run_one("t29"))  # the draft job goes first (higher priority than the queued output)
+        self.assertEqual(S.job(j["id"])["status"], "completed")
+        self.assertTrue(ok(client.get(f"/api/batches/{bid}"))["pairs"][0]["slots"][0].get("ai_draft") is not None
+                        or any(x.get("ai_draft") for x in ok(client.get(f"/api/batches/{bid}"))["pairs"][0]["slots"]))
+        self.assertEqual(submit(m, "d2-key")["run_id"], rid, "an AI suggestion that is not used does not change the submission")
+        prod = ps[0]
+        ok(client.patch(f"/api/products/{prod['id']}", json={"description": "corrected after sending"}))
+        try:
+            moved = client.post(f"/api/batches/{bid}/submit", json={"idempotency_key": "d2-key"})
+            self.assertEqual((moved.status_code, moved.json()["error"]["code"]), (409, "submission_changed"), "product content is part of it")
+        finally:
+            ok(client.patch(f"/api/products/{prod['id']}", json={"description": prod["description"]}))
         hs = next(s for s in m["pairs"][0]["slots"] if s["role"] == "headline")["slot_id"]
         ok(client.patch(f"/api/batches/{bid}/pairs/{m['pairs'][0]['pair_id']}", json={"manual": {hs: {"value": "Changed after\nsending"}}}))
         changed = client.post(f"/api/batches/{bid}/submit", json={"idempotency_key": "d2-key"})
@@ -752,6 +849,29 @@ class T24CrashAndRestart(unittest.TestCase):
         self.assertTrue(h["ai_draft"]["value"].startswith("[mock]"))
         S.record("D3.copy_resume", {"job": j["id"], "provider_requests": 1})
 
+    def test_drafting_again_after_an_interrupted_paid_request_needs_confirmation(self):
+        v, ps = setup_shared()
+        m = batch(v, ps[:1], name="draft interrupted")
+        body = {"pair_ids": [m["pairs"][0]["pair_id"]]}
+        j = ok(client.post(f"/api/batches/{m['batch']['id']}/draft-copy", json=body))
+        w = _Worker(DNA_TEST_CRASH_AT="after_provider_receipt")
+        try:
+            out, _ = w.p.communicate(timeout=300)
+        finally:
+            w.stop()
+        self.assertEqual(w.p.returncode, 86, out[-2000:])
+        self.wait_lease_expired(j["id"])
+        self.assertIn({"job": j["id"], "action": "needs_review"}, S.worker.recover())
+        blind = client.post(f"/api/batches/{m['batch']['id']}/draft-copy", json=body)
+        self.assertEqual((blind.status_code, blind.json()["error"]["code"]), (409, "confirm_paid_retry"), "AI drafting is a paid request too")
+        j2 = ok(client.post(f"/api/batches/{m['batch']['id']}/draft-copy", json=dict(body, confirm_new_paid_request=True)))
+        S.drain()
+        self.assertEqual(S.job(j2["id"])["status"], "completed")
+        self.assertEqual(client.post(f"/api/batches/{m['batch']['id']}/draft-copy", json=body).status_code, 200,
+                         "once a draft was delivered, drafting again is an ordinary request")
+        S.drain()
+        S.record("D3.draft_confirmation", {"after_interrupted": 409, "confirmed": "completed"})
+
     def test_cancel_stops_a_running_render(self):
         v, ps = setup_shared()
         r = submit(batch(v, ps[:1], name="cancel while rendering"), "t24-cancel")
@@ -770,6 +890,45 @@ class T24CrashAndRestart(unittest.TestCase):
         o = ok(client.get(f"/api/outputs/{o['id']}"))
         self.assertEqual(o["status"], "cancelled")
         S.record("T24.cancel_running", {"job": jid, "status": "cancelled"})
+
+
+class T30ProviderOutcomes(unittest.TestCase):
+    def test_gateway_timeouts_are_unknown_outcomes(self):
+        """A gateway that timed out says nothing about whether the provider finished (and billed) the request."""
+        from types import SimpleNamespace
+
+        import anthropic
+        import openai
+
+        from dna_dashboard.providers import anthropic_provider, openai_provider
+
+        def err(mod, status):  # a response as the SDKs read it (their HTTP library differs between versions)
+            r = SimpleNamespace(status_code=status, headers={}, request=SimpleNamespace(method="POST", url="https://api.example.invalid/v1"))
+            return mod.APIStatusError(f"HTTP {status}", response=r, body=None)
+
+        for mod, classify in ((openai, openai_provider._classify), (anthropic, anthropic_provider._classify)):
+            self.assertEqual([classify(err(mod, c)).kind for c in (502, 504, 524)], ["unknown_outcome"] * 3, mod.__name__)
+            self.assertEqual(classify(err(mod, 503)).kind, "unavailable")
+
+    def test_requests_recorded_before_call_keys_are_never_resent(self):
+        """A job re-queued by an earlier version after its request was answered: its row has no call key."""
+        from dna_dashboard.providers import ProviderError, provider_call
+
+        conn = S.db.connect()
+        jid = S.db.new_id("jb")
+        S.db.insert(conn, "provider_requests", {"id": S.db.new_id("pq"), "job_id": jid, "provider": "mock", "operation": "image_generation",
+                                                "status": "received", "started_at": S.db.now()})
+        calls = []
+        with self.assertRaises(ProviderError) as e:
+            provider_call(jid, "creative:op_x", "mock", "image_generation", None, lambda tr: calls.append(1), "bytes")
+        self.assertEqual((e.exception.kind, calls), ("unknown_outcome", []))
+        # an output completed before results were stored has a `received` request: its result was delivered
+        S.jobs.guard_paid_retry(conn, {"id": jid, "status": "completed"}, False, delivered=True)
+        with self.assertRaises(Exception) as g:
+            S.jobs.guard_paid_retry(conn, {"id": jid, "status": "needs_review"}, False)
+        self.assertEqual(getattr(g.exception, "code", None), "confirm_paid_retry")
+        S.record("D3.provider_outcomes", {"gateway_timeouts": "unknown_outcome", "legacy_rows": "not resent",
+                                          "delivered_received": "no confirmation", "undelivered_received": "confirmation"})
 
 
 class T26Exports(unittest.TestCase):

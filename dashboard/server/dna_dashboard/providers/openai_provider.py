@@ -10,7 +10,7 @@ import base64
 import io
 
 from .. import config
-from .base import Provider, ProviderError
+from .base import GATEWAY_TIMEOUTS, Provider, ProviderError
 
 
 def _client(key):
@@ -39,6 +39,9 @@ def _classify(e) -> ProviderError:
         kind = "refused" if "moderation" in msg.lower() or "safety" in msg.lower() else "bad_request"
         return ProviderError(n, kind, "OpenAI refused the image request" if kind == "refused" else "OpenAI rejected the request",
                              {"message": msg[:500]})
+    if isinstance(e, openai.APIStatusError) and e.status_code in GATEWAY_TIMEOUTS:
+        return ProviderError(n, "unknown_outcome", f"OpenAI's gateway timed out (HTTP {e.status_code}); the image may still have been "
+                                                   "generated (and billed)", {"status": e.status_code})
     if isinstance(e, openai.APIStatusError):
         return ProviderError(n, "unavailable" if e.status_code >= 500 else "bad_request", f"OpenAI API error {e.status_code}",
                              {"message": str(e)[:400]})

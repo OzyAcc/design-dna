@@ -12,8 +12,9 @@ the output's text policy (chosen and frozen before submission) decides what happ
   none     - imagery only (the copy is not used; disclosed before submission)
 creative_slot places a generated product scene into the template's image slot and runs the same engine checks.
 Every paid provider call goes through provider_call: its result is stored durably before anything is built from it,
-so a recovered job resumes from it instead of paying again. Before a paid result is handed to the engine, the
-template's renderer pin is checked, so a drifted template is refused before any request is made.
+so a recovered job resumes from it instead of paying again. Before a request whose result the engine must accept,
+the template's renderer pin is checked and the transaction is dry-run with a stand-in for the paid image, so drift,
+copy that does not fit, locks and failed checks refuse the output before any request is made.
 """
 from __future__ import annotations
 
@@ -146,8 +147,10 @@ def generate(ctx):
     if o["mode"] == "creative" and policy != "overlay":
         return _creative_raster(ctx, o, v, odir, policy)
     variant, head = _import(ctx, v)
-    if o["mode"] in ("creative", "creative_slot"):  # the engine must render the paid result: check its pin before paying
-        refused = _refuse_on_drift(ctx, o, v, variant)
+    # the engine must accept the paid result: check what it can before paying (a recovered attempt that resumes from a
+    # stored result has already paid, so it goes straight on, and a refusal keeps that result as evidence)
+    if o["mode"] in ("creative", "creative_slot") and not _requested_before(ctx):
+        refused = _refuse_on_drift(ctx, o, v, variant) or _refuse_before_paying(ctx, o, v, variant, head, odir)
         if refused:
             return refused
     image_file, source, prov_meta, artwork = None, "supplied", None, None
@@ -164,15 +167,14 @@ def generate(ctx):
         ops = compile_ops(inputs, image_file, source, _font_path(inputs))
     if not ops:
         raise AppError("nothing to change for this output", "no_ops")
-    patch = {"schema_version": "1.0.0", "base_revision": head, "keep": "everything_else",
-             "intent": f"output {o['id']}: {inputs['product']['name']} on {inputs['template']['name']} v{inputs['template']['number']} ({inputs['language']})",
-             "ops": ops}
+    patch = _patch(o, head, ops)
     ctx.stage("transaction", "applying the copy and " + ("the generated artwork" if artwork else "product image")
               + " as one verified transaction in the pinned renderer")
     try:
         txn = engine.call("transact", {"engine_id": v["engine_id"], "variant": variant, "patch": patch}, ctx.home, cancel=ctx.cancelled)
     except EngineError as e:
-        return _refused(ctx, o, odir, e, prov_meta, keep=[(artwork, "generated-artwork.png")] if artwork else ())
+        paid = [(artwork, "generated-artwork.png")] if artwork else [(image_file, "generated-slot.png")] if source == "generated" else []
+        return _refused(ctx, o, odir, e, prov_meta, keep=paid)  # a paid image is kept beside the refusal
     ctx.stage("export", "exporting PNG and self-contained SVG, then rendering the SVG to check it")
     exp = engine.call("export", {"engine_id": v["engine_id"], "variant": variant, "formats": ["png", "svg"]}, ctx.home, cancel=ctx.cancelled)
     ctx.stage("collect", "storing files and the check report")
@@ -209,7 +211,7 @@ def generate(ctx):
     lim = list(dict.fromkeys(inputs.get("warnings", []) + ts.version(ctx.conn, o["template_version_id"])["summary"]["eligibility"]["adapt"]["limitations"]))
     if artwork:
         checks["path"] = "creative_overlay"
-        checks["text"] = {"policy": "overlay", "live_text": {e["role"]: e["value"] for e in inputs["slots"] if e["value"] and not e["hidden"]},
+        checks["text"] = {"policy": "overlay", "live_text": _copy_list(inputs),
                           "verified": "rendered by the engine from the approved copy as live text (see the SVG and its manifest)"}
         checks["artwork"] = {"generated": True, "preservation": "not_applicable: the background artwork is new", "provider": prov_meta.get("provider"),
                              "requested_size": prov_meta.get("size_requested")}
@@ -233,7 +235,14 @@ def generate(ctx):
     return status, {"output_id": o["id"], "files": [f["name"] for f in files], "verification": checks["verification_status"]}
 
 
-def _refused(ctx, o, odir, e: EngineError, prov_meta, keep=()):
+def _patch(o, head, ops) -> dict:
+    i = o["inputs"]
+    return {"schema_version": "1.0.0", "base_revision": head, "keep": "everything_else",
+            "intent": f"output {o['id']}: {i['product']['name']} on {i['template']['name']} v{i['template']['number']} ({i['language']})",
+            "ops": ops}
+
+
+def _refused(ctx, o, odir, e: EngineError, prov_meta, keep=(), before_provider=False):
     """A refused transaction is a review artifact with the engine's conflicts and options, never a final output.
     `keep` lists inputs worth keeping beside it (a paid, generated image is never thrown away)."""
     txn = e.detail or {}
@@ -280,13 +289,16 @@ def _refused(ctx, o, odir, e: EngineError, prov_meta, keep=()):
         kind, msg = "infrastructure", "no Chromium-based browser could be launched; nothing was committed"
     else:
         kind, msg = "conflict", "the engine refused this output; nothing was committed"
+    if before_provider:
+        msg += ". This was checked before the image request, so nothing was requested from the provider"
     err = {"kind": kind, "message": msg, "conflicts": json.loads(json.dumps(conflicts, default=str))[:20]}
     if repro is not None:
         err["baseline_reproduction"] = repro
     checks = summarize_checks(txn, None) if v else {"path": "adapt", "verification_status": "not_run"}
     _set_output(ctx.conn, o["id"], status="needs_review", files=files, checks=checks, error=err,
-                provenance={"path": o["mode"], "generated": prov_meta}, limitations=["refused by the engine: see conflicts"])
-    return "needs_review", {"output_id": o["id"], "refused": True, "conflicts": err["conflicts"][:5]}
+                provenance={"path": o["mode"], "generated": prov_meta},
+                limitations=["refused by the engine: see conflicts"] + (["refused before generation (no paid request)"] if before_provider else []))
+    return "needs_review", {"output_id": o["id"], "refused": True, "before_provider": before_provider, "conflicts": err["conflicts"][:5]}
 
 
 def _template_passport(v) -> dict:
@@ -300,6 +312,16 @@ def creative_policy(inputs) -> str:
 
 def _copy(inputs) -> list[dict]:
     return [e for e in inputs["slots"] if e.get("value") and not e.get("hidden") and not e.get("unused")]
+
+
+def _copy_list(inputs) -> list[dict]:
+    """The copy an output shows, one entry per slot (several slots can share a role)."""
+    return [{"slot_id": e["slot_id"], "role": e["role"], "value": e["value"]} for e in _copy(inputs)]
+
+
+def copy_used(o) -> bool:
+    """Whether an output's copy reaches it: not for imagery only, nor for creative outputs frozen before text policies."""
+    return not (o["mode"] == "creative" and creative_policy(o["inputs"] or {}) == "none")
 
 
 def build_prompt(inputs, passport, purpose="artwork", text_policy="none", keep_clear=None) -> str:
@@ -361,6 +383,10 @@ def compile_overlay_ops(inputs, scene, artwork=None, font_path=None) -> list[dic
     return ops
 
 
+def _requested_before(ctx) -> bool:
+    return bool(db.one(ctx.conn, "SELECT 1 AS x FROM provider_requests WHERE job_id = ? LIMIT 1", (ctx.job["id"],)))
+
+
 def _refuse_on_drift(ctx, o, v, variant):
     """Refuse before any paid request if the engine could not render the paid result under the template's pin."""
     ctx.stage("pin", "checking the template's pinned renderer before any paid request")
@@ -375,6 +401,44 @@ def _refuse_on_drift(ctx, o, v, variant):
                 checks={"path": o["mode"], "verification_status": "not_run", "renderer": {"status": "drift"}},
                 provenance={"path": o["mode"], "generated": None}, limitations=["refused before generation: renderer drift (no paid request)"])
     return "needs_review", {"output_id": o["id"], "refused": True, "before_provider": True}
+
+
+def _refuse_before_paying(ctx, o, v, variant, head, odir):
+    """Dry-run the transaction the paid result will go into, with the template's own background (overlay) or the
+    product photo (a generated slot photo) in its place. Copy that does not fit, a lock or a failed check refuses the
+    output now, before any request is paid for. The paid result can still be refused later for reasons of its own."""
+    inputs = o["inputs"]
+    if o["mode"] == "creative":  # the stand-in replaces the background too, so locks on it are checked before paying
+        ops = compile_overlay_ops(inputs, ts.version_scene(v), _stand_in_artwork(ctx, inputs), _font_path(inputs))
+    else:
+        stand_in = _product_png(ctx, inputs["image"]["asset_id"]) if inputs.get("image") and inputs["image"].get("asset_id") else None
+        ops = compile_ops(inputs, stand_in, "supplied", _font_path(inputs))
+    if not ops:
+        return None
+    ctx.stage("precheck", "checking the copy and the template's rules in the pinned renderer before any paid request")
+    try:
+        engine.call("transact", {"engine_id": v["engine_id"], "variant": variant, "patch": _patch(o, head, ops), "dry_run": True},
+                    ctx.home, cancel=ctx.cancelled)
+    except EngineError as e:
+        return _refused(ctx, o, odir, e, None, before_provider=True)
+    return None
+
+
+def _stand_in_artwork(ctx, inputs) -> Path:
+    """A canvas-sized checkerboard: it changes every pixel of any background, so the dry run meets every lock the paid
+    artwork would."""
+    W, H = int(inputs["template"]["canvas"]["width"]), int(inputs["template"]["canvas"]["height"])
+    f = ctx.dir / "inputs" / "stand-in-artwork.png"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tile = Image.new("RGB", (16, 16), (214, 32, 160))
+    tile.paste((32, 180, 96), (0, 0, 8, 8))
+    tile.paste((32, 180, 96), (8, 8, 16, 16))
+    im = Image.new("RGB", (W, H))
+    for x in range(0, W, 16):
+        for y in range(0, H, 16):
+            im.paste(tile, (x, y))
+    im.save(f, "PNG")
+    return f
 
 
 def _generate_image(ctx, o, prov, imgs, prompt, size, call_key):
@@ -434,11 +498,13 @@ def _creative_raster(ctx, o, v, odir, policy):
     lim = ["creative result: layout, typography and colours are not verified against the template",
            "AI resemblance is not proof of the product's identity: compare it with the product photo"]
     if policy == "in_image":
-        requested = {e["role"]: e["value"] for e in _copy(inputs)}
-        checks["text"] = {"policy": "in_image", "requested": requested,
+        checks["text"] = {"policy": "in_image", "requested": _copy_list(inputs),
                           "verified": "not checked automatically (no OCR): confirm it matches the approved copy before approving"}
         lim.append("the text was drawn by the image model: it is not live or editable and may be misspelled; confirm it matches "
                    "the approved copy before approving")
+    elif "creative_text" not in inputs:  # frozen before text policies existed: nobody chose imagery only
+        checks["text"] = {"policy": "none", "legacy": True, "note": "submitted before text policies existed: no text was requested"}
+        lim.append("submitted before text policies existed: no text was requested and the copy was not used")
     else:
         checks["text"] = {"policy": "none", "note": "imagery only, chosen before submission: the copy was not used"}
         lim.append("imagery only (chosen before submission): no text was requested and the copy fields were not used")

@@ -132,15 +132,18 @@ def retry(oid: str, body: RetryReq, conn=Depends(get_conn)):
     if dup:
         x = db.one(conn, "SELECT id FROM outputs WHERE job_id = ?", (dup["id"],))
         return {"output_id": x["id"] if x else None, "duplicate": True}
-    reqs = db.all_(conn, "SELECT * FROM provider_requests WHERE job_id = ?", (o["job_id"],)) if o.get("job_id") else []
-    # a request that may have been billed (outcome unknown, or answered) whose result this output did not deliver
-    paid = [u for u in reqs if u["status"] in ("unknown", "sending", "received") or (u["status"] == "stored" and o["status"] != "completed")]
-    if paid and not body.confirm_new_paid_request:
-        raise conflict("the previous attempt already reached the provider (its request may have been billed) and this output did not "
-                       "deliver its result. Confirm to send a new paid request.",
-                       "confirm_paid_retry", provider_requests=[{k: u[k] for k in ("id", "provider", "operation", "status", "request_id")} for u in paid])
+    child = db.one(conn, "SELECT id FROM outputs WHERE parent_output_id = ? AND status IN ('queued', 'running')", (oid,))
+    if child:  # e.g. a retry whose answer was lost: never a second paid request for one intent
+        raise conflict("a retry of this output is already queued or running", "retry_in_progress", output_id=child["id"])
+    job = db.one(conn, "SELECT * FROM jobs WHERE id = ?", (o["job_id"],)) if o.get("job_id") else None
+    jobs.guard_paid_retry(conn, job, body.confirm_new_paid_request, delivered=o["status"] == "completed")
     inputs = dict(o["inputs"])
     changed = []
+    from ..handlers.output_jobs import copy_used
+
+    if body.copy_values and not copy_used(o):
+        raise AppError("this output generates imagery only, so revised copy would not be used: choose a text policy in the composer "
+                       "and generate it again", "copy_not_used")
     if body.copy_values:
         slots = []
         for e in inputs["slots"]:

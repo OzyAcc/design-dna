@@ -127,6 +127,12 @@ into a template library with batch generation.
     submitting: live text over generated artwork (default, engine-verified PNG + SVG), text drawn by the image
     model (approval requires confirming it), or imagery only (disclosed). The renderer pin is checked before any
     paid request whose result the engine must render.
+  - A review of these fixes found more cases of the same problems, also fixed: the output is dry-run with a
+    stand-in for the paid image before the request (copy that does not fit or a locked background no longer costs
+    a request); output retries keep one key until answered; analysis and AI drafting also ask before a new paid
+    request after an interrupted one; provider gateway timeouts count as unknown outcomes; the submission fingerprint
+    covers product content and ignores unused AI suggestions; sign-in and proxy errors no longer clear a submission
+    key; failed choices are shown as they are instead of being replayed by Generate.
 
 ## [2.0.0] — 2026-10-06
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 
 from . import db
-from .errors import AppError
+from .errors import AppError, conflict
 
 TERMINAL = ("completed", "needs_review", "failed", "cancelled")
 
@@ -150,6 +150,33 @@ def recover(conn) -> list[dict]:
     for o in out:
         o["record"] = get(conn, o["job"])
     return out
+
+
+UNSETTLED = ("sending", "unknown", "received", "stored")
+
+
+def guard_paid_retry(conn, job: dict | None, confirmed: bool, delivered: bool | None = None) -> None:
+    """Before an explicit retry: if the earlier attempt's provider request may have been billed (in flight or unknown,
+    answered but not stored, or stored but never delivered), sending a new one needs `confirm_new_paid_request`.
+    `delivered` says whether that attempt's result reached the user (default: its job completed)."""
+    if not job or confirmed:
+        return
+    if delivered is None:
+        delivered = job["status"] == "completed"
+    reqs = db.all_(conn, "SELECT * FROM provider_requests WHERE job_id = ?", (job["id"],))
+    # answered or stored: billed, and lost only if the attempt did not deliver (a completed output from before results
+    # were stored has `received` requests)
+    paid = [u for u in reqs if u["status"] in ("sending", "unknown") or (u["status"] in ("received", "stored") and not delivered)]
+    if paid:
+        raise conflict("the previous attempt already reached the provider (its request may have been billed) and its result was not "
+                       "delivered. Confirm to send a new paid request.", "confirm_paid_retry",
+                       provider_requests=[{k: u[k] for k in ("id", "provider", "operation", "status", "request_id")} for u in paid])
+
+
+def latest(conn, kind: str, **scope) -> dict | None:
+    (col, val), = scope.items()
+    assert col in ("template_id", "batch_id")
+    return db.one(conn, f"SELECT * FROM jobs WHERE kind = ? AND {col} = ? ORDER BY created_at DESC, rowid DESC LIMIT 1", (kind, val))
 
 
 def public(j: dict) -> dict:

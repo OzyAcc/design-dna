@@ -381,7 +381,7 @@ def resolve(conn, b: dict, p: dict, providers_ok: dict | None = None) -> dict:
         if primary.get("locked"):
             problems.append(f"{primary['role']}: the image slot is locked by the template")
         for x in image_slots:
-            if x is not primary:
+            if x is not primary and mode in ("adapt", "creative_slot"):  # creative modes replace every image layer
                 warnings.append(f"{x['role']}: keeps the reference image (design evidence from the original)")
     logos = [x for x in s["slots"] if x["type"] == "logo"]
     if logos:
@@ -416,7 +416,7 @@ def resolve(conn, b: dict, p: dict, providers_ok: dict | None = None) -> dict:
         if creative_text is None:
             warnings.append("creative generation produces a new image: no pixel preservation or editability is claimed")
     font = None
-    if lang == "ar":
+    if lang == "ar" and not copy_unused and creative_text != "in_image":  # the font renders live text only
         fsha = defaults.get("arabic_font")
         if not fsha:
             problems.append("Arabic needs a font that covers its glyphs: choose one in the batch settings")
@@ -430,7 +430,7 @@ def resolve(conn, b: dict, p: dict, providers_ok: dict | None = None) -> dict:
                 for e in slots:
                     if e["value"] and not e["hidden"] and not el.covers(font["path"], e["value"]):
                         problems.append(f"{e['role']}: {font['names'].get('full')} lacks glyphs for this text")
-    if p.get("version_check", {}) and (p.get("version_check") or {}).get("needs_confirmation"):
+    if not copy_unused and (p.get("version_check") or {}).get("needs_confirmation"):
         problems.append("the selected template version changed and some slots differ: confirm how to map this output's copy")
     instr = [x for x in ((s.get("defaults") or {}).get("instructions"), defaults.get("instructions"), po_prod.get("instructions"),
                          prod.get("instructions"), p.get("instructions")) if x]
@@ -494,11 +494,24 @@ def public(b: dict) -> dict:
                                   "run_id", "created_at", "updated_at")}
 
 
+SLOT_CONTENT = ("slot_id", "value", "hidden", "unused", "approved", "locked")
+PRODUCT_CONTENT = ("id", "name", "description", "facts", "primary_asset_id", "detail_asset_ids")
+
+
 def fingerprint(included: list[dict]) -> str:
-    """What a submission is: every included output's resolved inputs (copy, mode, text policy, language, images,
-    template version) and instructions. A submission key always means this content and nothing else."""
-    items = sorted((r["pair_id"], r.get("inputs_hash"), r.get("instructions"), r.get("creative_text")) for r in included)
-    return hashlib.sha256(json.dumps(items, default=str).encode()).hexdigest()[:24]
+    """What a submission is: everything frozen into its outputs that changes what they become (copy, mode, text
+    policy, language, images, font, template version, product content and instructions). A submission key always
+    means this content and nothing else. Suggestions that are not used (AI drafts) and display names are left out."""
+    items = []
+    for r in included:
+        t, f = r.get("template") or {}, r.get("arabic_font") or {}
+        items.append({"pair_id": r["pair_id"], "mode": r.get("mode"), "language": r.get("language"), "creative_text": r.get("creative_text"),
+                      "slots": [{k: e.get(k) for k in SLOT_CONTENT} for e in r.get("slots") or []], "image": r.get("image"),
+                      "logos_hidden": r.get("logos_hidden"), "arabic_font": f.get("sha256"), "instructions": r.get("instructions"),
+                      "template": [t.get("version_id"), t.get("bundle_sha256")],
+                      "product": {k: (r.get("product") or {}).get(k) for k in PRODUCT_CONTENT}})
+    items.sort(key=lambda x: x["pair_id"])
+    return hashlib.sha256(json.dumps(items, sort_keys=True, default=str).encode()).hexdigest()[:24]
 
 
 def submission(conn, idempotency_key: str) -> dict | None:

@@ -23,6 +23,8 @@ from ..errors import AppError
 from ..faults import crash_point
 
 KINDS = ("unconfigured", "unauthorized", "rate_limited", "unavailable", "unsupported", "refused", "bad_request", "unknown_outcome")
+# a gateway that timed out waiting for the provider says nothing about whether the provider finished (and billed) the request
+GATEWAY_TIMEOUTS = (502, 504, 524)
 
 
 class ProviderError(AppError):
@@ -144,8 +146,8 @@ def provider_call(job_id: str, call_key: str, provider: str, operation: str, mod
     """
     conn = db.connect()
     try:
-        prior = db.all_(conn, "SELECT * FROM provider_requests WHERE job_id = ? AND call_key = ? ORDER BY started_at, id",
-                        (job_id, call_key))
+        prior = db.all_(conn, "SELECT * FROM provider_requests WHERE job_id = ? AND (call_key = ? OR call_key IS NULL) "
+                              "ORDER BY started_at, id", (job_id, call_key))  # NULL: recorded before call keys existed
     finally:
         conn.close()
     for p in reversed(prior):

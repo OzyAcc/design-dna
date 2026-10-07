@@ -6,7 +6,7 @@ import AssetIntake from "../components/AssetIntake";
 import CompareViewer from "../components/CompareViewer";
 import ElementCanvas, { type El } from "../components/ElementCanvas";
 import type { ModelView } from "../components/Inspector";
-import { Dev, errText, Events, JobLine, useJob, useToast } from "../lib";
+import { Dev, errText, Events, JobLine, postPaid, useJob, useToast } from "../lib";
 
 const STEPS = [["purpose", "Name and purpose"], ["scan", "Scan"], ["rules", "Review rules"], ["rebuild", "Rebuild and compare"], ["save", "Save to library"]] as const;
 type Step = (typeof STEPS)[number][0];
@@ -204,7 +204,11 @@ function Scan({ t, save, reload, next }: { t: Template; save: (c: any, q?: boole
   const upd = (k: string, patch: Partial<El>) => { setEls((xs) => xs.map((x) => (x.key === k ? { ...x, ...patch, edited: true } : x))); setDirty(true); };
   const cur = els.find((x) => x.key === sel);
   const run = async (path: string) => {
-    try { if (dirty) { await save({ draft: { elements: els } }, true); setDirty(false); } const j = await api.post<any>(path, {}); setJobId(j.id); }
+    try {
+      if (dirty) { await save({ draft: { elements: els } }, true); setDirty(false); }
+      const j = path.endsWith("/analyze") ? await postPaid<any>(path, {}) : await api.post<any>(path, {}); // analysis is a paid request
+      if (j) setJobId(j.id);
+    }
     catch (e) { toast(errText(e), true); }
   };
   const meas = d.measure, val = d.validation;

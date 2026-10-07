@@ -359,6 +359,156 @@ class ComposerWrites(_Browser):
         self.assertFalse(errors, errors[:5])
         S.record("D2.browser", {"lost_then_retried": "same run", "lost_then_reloaded": "recovered and shown", "new_generate": "new run"})
 
+    # ---- found by the adversarial review of the fixes
+    def lose_answer(self, route):
+        route.fetch()
+        route.abort("failed")
+
+    def test_an_error_that_is_not_an_answer_keeps_the_submission_identity(self):
+        bid, _ = self.fresh_batch("proxy error after a lost answer")
+        page, errors = self.compose(bid)
+        submit_re = re.compile(r".*/api/batches/[^/]+/submit$")
+        page.route(submit_re, self.lose_answer)
+        self.generate_button(page).click()
+        page.wait_for_selector("text=could not be confirmed", timeout=30000)
+        page.unroute(submit_re)
+        page.route(submit_re, lambda route: route.fulfill(status=429, content_type="text/plain", body="Too many requests"))
+        self.generate_button(page).click()  # a proxy answers, not the server: says nothing about the first attempt
+        page.wait_for_timeout(1500)
+        self.assertTrue(page.evaluate(f"localStorage.getItem('dna.submit.{bid}')"), "the identity is kept")
+        page.unroute(submit_re)
+        page.route(submit_re, lambda route: route.fulfill(status=200, content_type="text/html", body="<html>Sign in to the network</html>"))
+        self.generate_button(page).click()  # a captive portal's page is not the server's answer either
+        page.wait_for_selector("text=could not be confirmed", timeout=15000)
+        self.assertIn("/generate", page.url)
+        self.assertTrue(page.evaluate(f"localStorage.getItem('dna.submit.{bid}')"), "still kept")
+        page.unroute(submit_re)
+        self.generate_button(page).click()
+        page.wait_for_url("**/runs/*", timeout=30000)
+        self.assertEqual(len(self.runs_of(bid)), 1)
+        self.cancel_runs(bid)
+        page.close()
+        S.record("D2.proxy_error", {"runs": 1})
+
+    def test_a_second_tab_retries_the_same_submission(self):
+        bid, _ = self.fresh_batch("two tabs")
+        ctx = self.browser.new_context(viewport={"width": 1280, "height": 900})  # two tabs of one browser share its storage
+        a, b = ctx.new_page(), ctx.new_page()
+        for pg in (a, b):  # both open before the first tab submits
+            pg.goto(f"{self.base}/generate?batch={bid}")
+            pg.wait_for_selector('textarea[aria-label="headline copy"]')
+        submit_re = re.compile(r".*/api/batches/[^/]+/submit$")
+        a.route(submit_re, self.lose_answer)
+        self.generate_button(a).click()
+        a.wait_for_selector("text=could not be confirmed", timeout=30000)
+        self.generate_button(b).click()
+        b.wait_for_url("**/runs/*", timeout=30000)
+        runs = self.runs_of(bid)
+        self.assertEqual(len(runs), 1, "the other tab retried the same submission")
+        self.assertTrue(b.url.endswith(runs[0]))
+        self.cancel_runs(bid)
+        ctx.close()
+        S.record("D2.second_tab", {"runs": 1})
+
+    def test_a_failed_choice_is_shown_as_it_is_and_never_replayed(self):
+        bid, pid = self.fresh_batch("failed choice")
+        page, _ = self.compose(bid)
+        pair_re = re.compile(r".*/api/batches/[^/]+/pairs/[^/]+$")
+        page.route(pair_re, lambda route: route.abort("failed") if route.request.method == "PATCH" and '"mode"' in (route.request.post_data or "") else route.continue_())
+        page.select_option('select[aria-label="Mode"]', "creative")
+        page.wait_for_timeout(1500)
+        self.assertEqual(page.input_value('select[aria-label="Mode"]'), "", "the select shows what the server has")
+        page.unroute(pair_re)
+        self.generate_button(page).click()
+        page.wait_for_url("**/runs/*", timeout=30000)
+        o = ok(client.get(f"/api/runs/{self.runs_of(bid)[0]}"))["outputs"][0]
+        self.assertEqual(o["mode"], "adapt", "a choice that failed on screen is never sent unseen (creative would be a paid request)")
+        self.cancel_runs(bid)
+        page.close()
+        S.record("D1.failed_choice", {"mode": "adapt"})
+
+    def test_a_lost_variant_answer_is_not_added_again(self):
+        bid, _ = self.fresh_batch("lost variant")
+        m = ok(client.get(f"/api/batches/{bid}"))  # a variant inherits the batch default, so it is ready to generate
+        ok(client.patch(f"/api/batches/{bid}", json={"base_revision": m["batch"]["revision"], "changes": {"defaults": {"copy": {"headline": "Batch\nheadline"}}}}))
+        page, _ = self.compose(bid)
+        var_re = re.compile(r".*/api/batches/[^/]+/variants$")
+        page.route(var_re, self.lose_answer)
+        page.get_by_role("button", name="+ Variant").click()
+        page.wait_for_selector("text=Not saved", timeout=15000)
+        page.unroute(var_re)
+        page.wait_for_function("document.querySelectorAll('article.out-card').length === 2", timeout=15000)  # reloaded: it exists
+        self.generate_button(page).click()
+        page.wait_for_url("**/runs/*", timeout=30000)
+        self.assertEqual(len(ok(client.get(f"/api/batches/{bid}"))["pairs"]), 2, "the variant was not added a second time")
+        self.assertEqual(len(ok(client.get(f"/api/runs/{self.runs_of(bid)[0]}"))["outputs"]), 2, "exactly the outputs on screen")
+        self.cancel_runs(bid)
+        page.close()
+        S.record("D1.lost_variant", {"pairs": 2})
+
+    def test_use_inherited_value_shows_the_value_that_will_be_used(self):
+        bid, pid = self.fresh_batch("inherited")
+        cta = next(x for x in ok(client.get(f"/api/batches/{bid}"))["pairs"][0]["slots"] if x["role"] == "cta")
+        ok(client.patch(f"/api/batches/{bid}/pairs/{pid}", json={"manual": {cta["slot_id"]: {"value": "Shop now"}}}))  # same as the default
+        page, _ = self.compose(bid)
+        box = 'textarea[aria-label="cta copy"]'
+        page.fill(box, "Shop now today")
+        page.locator(".slot-field", has=page.locator(box)).get_by_role("button", name="Use inherited value").click()
+        self.saved(page)
+        page.wait_for_timeout(500)
+        self.assertEqual(self.slot_value(bid, "cta"), "Shop now")
+        self.assertEqual(page.input_value(box), "Shop now", "the box shows what will be generated")
+        page.close()
+        S.record("D1.inherited", {"screen": "Shop now"})
+
+    def test_leaving_with_unsaved_changes_asks_first(self):
+        bid, _ = self.fresh_batch("leave unsaved")
+        page, _ = self.compose(bid)
+        page.get_by_role("link", name="Change selection").click()  # nothing pending: leaves at once
+        page.wait_for_url("**/templates", timeout=15000)
+        page.go_back()  # history now has an in-app entry ahead of the composer
+        page.wait_for_selector('textarea[aria-label="headline copy"]')
+        pair_re = re.compile(r".*/api/batches/[^/]+/pairs/[^/]+$")
+        page.route(pair_re, lambda route: route.abort("failed") if route.request.method == "PATCH" and "instructions" in (route.request.post_data or "") else route.continue_())
+        page.get_by_label("Extra instructions for this output").fill("Warm morning light")
+        page.locator("h1").click()  # blur: the save is sent and fails
+        page.wait_for_selector("text=change(s) not saved", timeout=15000)
+        answers = ["dismiss", "dismiss", "accept"]
+        page.on("dialog", lambda d: d.dismiss() if answers.pop(0) == "dismiss" else d.accept())
+        page.get_by_role("link", name="Change selection").click()
+        page.wait_for_timeout(1500)
+        self.assertIn("/generate", page.url, "declining keeps the page and its unsaved change")
+        page.go_forward()  # the browser's Forward button is held the same way
+        page.wait_for_timeout(1500)
+        self.assertIn("/generate", page.url)
+        self.assertTrue(page.locator("text=change(s) not saved").is_visible(), "still reported, not silently dropped")
+        page.get_by_role("link", name="Change selection").click()
+        page.wait_for_url("**/templates", timeout=15000)
+        self.assertEqual(answers, [])
+        page.close()
+        S.record("D1.leave_unsaved", {"link": "asked", "forward_button": "asked"})
+
+    def test_a_lost_retry_answer_does_not_make_a_second_revision(self):
+        bid, _ = self.fresh_batch("lost retry")
+        run = ok(client.post(f"/api/batches/{bid}/submit", json={"idempotency_key": f"lost-retry-{bid}"}))
+        o = ok(client.get(f"/api/runs/{run['run_id']}"))["outputs"][0]
+        ok(client.post(f"/api/outputs/{o['id']}/cancel"))
+        page, _ = self.open(1280)
+        page.goto(f"{self.base}/runs/{run['run_id']}")
+        page.get_by_role("button", name="Review").click()
+        retry_re = re.compile(r".*/api/outputs/[^/]+/retry$")
+        page.route(retry_re, self.lose_answer)
+        page.get_by_role("button", name="Retry this output").click()
+        page.wait_for_timeout(2000)
+        page.unroute(retry_re)
+        page.get_by_role("button", name="Retry this output").click()
+        page.wait_for_selector("text=already received", timeout=15000)
+        kids = S.db.all_(S.db.connect(), "SELECT id FROM outputs WHERE parent_output_id = ?", (o["id"],))
+        self.assertEqual(len(kids), 1, "one revision for one retry")
+        self.cancel_runs(bid)
+        page.close()
+        S.record("D3.lost_retry", {"revisions": 2})
+
 
 if __name__ == "__main__":
     unittest.main()
