@@ -269,7 +269,8 @@ def t20(root, fx, record, expect_error):
     o = folder(root, 20, "bundle-roundtrip")
     lib = Path(root) / "bundle-library"
     b1 = export_bundle(T, lib, "embed")
-    b2 = export_bundle(T, lib, "reference")
+    # its own folder: in one library the newest export wins by name, and which one is newer depends on the clock
+    b2 = export_bundle(T, Path(root) / "bundle-library-fontref", "reference")
     fdirs = [fontset.font_dir()]  # where referenced fonts resolve by hash (the system folders are searched too)
     v1, v2 = validate_bundle(b1["bundle"]), validate_bundle(b2["bundle"], fdirs)
     v2_nosys = validate_bundle(b2["bundle"], search_system=False)
@@ -295,7 +296,7 @@ def t20(root, fx, record, expect_error):
     edited = next(vid for vid, v in manifest["variants"].items() if v["head"] != v["baseline_revision"])
     dna.session({"template": TID, "variant": edited})
     u = dna.run("undo last")
-    imp2 = import_bundle(lib / Path(b2["bundle"]).name, as_id="editorial-fontref", font_dirs=fdirs)
+    imp2 = import_bundle(b2["bundle"], as_id="editorial-fontref", font_dirs=fdirs)
     t2 = template_dir("editorial-fontref")
     rr2 = render(read_json(t2 / "scene.json"), t2, o / "re-render-fontref", name="baseline")
     same2 = pixel_metrics(decode(rr2["png"])[0], decode(tdir / passport["baseline_render"]["path"])[0])["unequal_pixels"]

@@ -55,11 +55,15 @@ the acceptance suite runs off Windows (the first open item of the audit response
   not only Edge; with none it stays unverified.
 - `annotate_scan.py` no longer crashes on text nodes whose baseline is not measured yet (found by the Claude Code
   end-to-end run).
-- Library lookup (`fetch`, `bundle.py get`): when two bundles of a template were exported in the same second, the
-  choice depended on file-name order and could pick the font-referenced bundle, which fails to import where its
-  fonts are not installed (seen as a T20 crash cascading into T21-T32). Ties now go to the self-contained bundle.
+- T20 exports its font-referenced bundle to a folder of its own. With both bundles in one library, a lookup by
+  name returns the newest export, so whenever the second export landed in a later second T20 imported the
+  font-referenced bundle, which cannot import where its fonts are not installed (seen as a T20 crash cascading into
+  T21-T32 on Linux). Library lookups (`fetch`, `bundle.py get`) also break same-second ties in favour of the
+  self-contained bundle instead of file-name order.
 - T20 resolves the font-referenced bundle's fonts from the font set's folder (`font_dirs`) as well as the system
   font folders.
+- T01 also checks the CTA's horizontal position (within 1 px, like the label and headline), and a failed
+  `editable_close` verdict now reports each failed region's SSIM, the fitted text parameters and the renderer.
 
 ## [2.0.0] — 2026-10-06
 

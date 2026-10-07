@@ -153,17 +153,18 @@ scope, update, protection of edited and foreign folders, uninstall that keeps te
 
 | OS | Result |
 |---|---|
-| Linux (Ubuntu 24.04, Python 3.13) | ✅ 15/15 tests |
-| Windows, macOS | the `hosts` workflow runs the same tests on `windows-latest` and `macos-latest`; not run yet (it starts on the next push to `main` or pull request) |
+| Linux (Ubuntu 24.04, Python 3.13) | ✅ 16/16 tests |
+| Linux, Windows, macOS (GitHub `ubuntu-latest`, `windows-latest`, `macos-latest`, Python 3.12) | ✅ the `hosts` workflow's `installer` jobs on pull request #1 |
 
 ### Engine
 
-Host packaging does not change the engine, but this change carries two engine fixes: `annotate_scan.py` (found by
-the Claude Code run above) and the library's tie-break between bundles exported in the same second (found when an
-acceptance re-run crashed in T20 and cascaded into T21-T32). After both, the full suite on Linux with the
-portable fonts: **run `20261007-005538`, 31/31 passed, 2 unverified** (T21: no second browser channel in the
-container; T23: by design). Windows runs in the existing `acceptance` workflow. History:
-[BUILD-REPORT](../BUILD-REPORT.md).
+Host packaging does not change the engine, but this change carries two fixes found along the way: `annotate_scan.py`
+(found by the Claude Code run above) and T20's bundle lookup (an acceptance re-run crashed in T20 and cascaded into
+T21-T32; T20 now keeps its embedded and font-referenced bundles in separate folders, and the library breaks
+same-second ties in favour of the self-contained bundle). The full suite on Linux with the portable fonts:
+**run `20261007-005538`, 31/31 passed, 2 unverified** (T21: no second browser channel in the container; T23: by
+design), then with Chrome 154 installed as a second channel **run `20261007-011727`, 32/32 passed, 1 unverified**
+(T23). Windows runs in the existing `acceptance` workflow. History: [BUILD-REPORT](../BUILD-REPORT.md).
 
 ## Reproduce
 

@@ -296,7 +296,7 @@ def t01(root: Path, fx: Path, ref: Path, record):
     errs = {"geometry_max_px": geo, "label_size_pct": abs(lsize / 28 - 1) * 100, "head_size_pct": abs(hsize / 84 - 1) * 100,
             "cta_size_pct": abs(csize / 34 - 1) * 100, "label_tracking_px": abs(tracking - 4),
             "baselines_px": {k: abs(me[k]["first_baseline"] - gt[k]["first_baseline"]) for k in ("n-label", "n-headline", "n-cta-text")},
-            "x_px": {"n-label": abs(x_label - 80), "n-headline": abs(x_head - 80)}, "line_height_px": abs(lh - 96),
+            "x_px": {"n-label": abs(x_label - 80), "n-headline": abs(x_head - 80), "n-cta-text": abs(cx_cta - 260)}, "line_height_px": abs(lh - 96),
             "radius_px": abs(rad["radius_estimate"] - 32), "shadow_dx_px": abs(mfx["dx"]), "shadow_dy_px": abs(mfx["dy"] - 18), "shadow_sigma_px": abs(mfx["blur"] - 22),
             "shadow_amplitude_max_err": max(abs(a - b2) for a, b2 in zip(A_gt, sh["amplitude_per_channel"])), "shadow_spread_px": spread,
             "saturate_err": abs(tr["saturate"] - 0.85), "contrast_err": abs(tr["contrast"] - 1.08), "focal_y_err": abs(focal[1] - 0.55),
@@ -316,7 +316,12 @@ def t01(root: Path, fx: Path, ref: Path, record):
         "treatment saturate/contrast within 0.05; focal within 0.1": errs["saturate_err"] <= 0.05 and errs["contrast_err"] <= 0.05 and errs["focal_y_err"] <= 0.1
         or {k: errs[k] for k in ("saturate_err", "contrast_err", "focal_y_err")},
         "sheen opacity within 0.03 (white assumed)": errs["sheen_alpha_err"] <= 0.03 or errs["sheen_alpha_err"],
-        "the rebuild itself passes editable_close against the reference": rep["overall"]["status"] == "pass" or rep["overall"],
+        "the rebuild itself passes editable_close against the reference": rep["overall"]["status"] == "pass" or dict(
+            rep["overall"], regions={k.split(".", 1)[1]: {m: rep["checks"]["regions"][k.split(".", 1)[1]][m] for m in ("ssim", "unequal_fraction", "max_channel_error")}
+                                     for k in rep["overall"]["failed"] if k.startswith("regions.")},
+            fits={k: {"font": rows[0]["name"], "params": rows[0]["params"], "seed": rows[0]["seed"], "mae_end": rows[0]["mae_end"]}
+                  for k, rows in (("label", fl), ("headline", fh), ("cta", fc))},
+            renderer="{channel} {browser_version}".format(**r["render_profile"])),
     }, [o / "scores.json", o / "measurements.json", o / "compare" / "side_by_side.png", o / "compare" / "diff_heatmap.png"],
         notes=f"pixel verdict (editable_close): {rep['overall']['status']}; failed={rep['overall'].get('failed')}")
 

@@ -136,6 +136,14 @@ T23 is unverified by design.
 in-progress scan no longer crashes `annotate_scan.py`, and library lookups break export-time ties in favour of the
 self-contained bundle (a same-second export pair had made T20 import the font-referenced bundle and fail).
 
+**Re-run with Google Chrome for Testing 154.0.8037.57 (the version GitHub's Ubuntu runners carry):
+`20261007-011727`, 32/32 passed, 1 unverified (T23, by design).** Two browser channels were installed, so T21's real
+drift check ran (Chrome pinned, Playwright's Chromium as the switch). This run also carries the real fix for the
+T20 crash above: a lookup by name returns the newest export, and the font-referenced bundle was the newer one
+whenever its export landed in a later second than the self-contained one, which the same-second tie-break did not
+cover. T20 now keeps the two bundles in separate folders. T01 alone also passes with the CI job's exact Python
+(3.12) and `requirements-lock.txt` packages.
+
 The CI workflow gains an `acceptance-linux` job (ubuntu-latest, portable fonts, `requirements-lock.txt`). It runs
 on the next push to `main` or pull request; its results are not part of this report yet. macOS is untested.
 
