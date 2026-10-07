@@ -240,7 +240,7 @@ design-dna/
 │   └── tests/                   acceptance suite, audit regressions, deterministic fixtures
 ├── docs/                        BUILD-REPORT, AUDIT-RESPONSE, CHATGPT-WORK, SPEC, images, image generator
 ├── CAPABILITIES.md · INSTALL.md · CHANGELOG.md · requirements-lock.txt
-└── .github/                     CI (lint + Windows acceptance), issue/PR templates
+└── .github/                     CI (lint, Windows + Linux acceptance), issue/PR templates
 ```
 
 ## Platform notes
@@ -248,8 +248,9 @@ design-dna/
 - Verified on Windows 10 with Python 3.12, Chrome 154 and Edge 154 (CI: `windows-latest`, preinstalled browsers).
   The engine is pure Python + Chromium and should run on macOS/Linux, but the acceptance fixtures currently use
   Windows system fonts (Arial, Georgia, Bahnschrift, …).
-- The repository ships no font files. Bundles can embed fonts (check the licences before sharing) or reference them
-  by sha256 so they resolve from local font folders.
+- The only font files in the repository are the acceptance suite's open-licensed test fonts
+  ([tests/fonts](skills/reverse-design/tests/fonts/README.md)). Bundles can embed fonts (check the licences before
+  sharing) or reference them by sha256 so they resolve from local font folders.
 - Reviewing or adapting the package for ChatGPT Work or another agent host: [docs/CHATGPT-WORK.md](docs/CHATGPT-WORK.md).
 
 ## Roadmap
@@ -258,7 +259,6 @@ design-dna/
 - PDF adapter (embedded fonts and vectors as source evidence → verified font identity)
 - Layered-source adapters (SVG, Figma export) and website/UI state capture
 - OCR provider integration behind the capability interface
-- Cross-platform acceptance fixtures with open-licensed fonts (Linux/macOS CI)
 - Distribute-style reflow policy (fill vertical space instead of anchoring to edges)
 
 ## Contributing

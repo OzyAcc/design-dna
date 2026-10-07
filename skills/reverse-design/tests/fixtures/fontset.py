@@ -23,7 +23,7 @@ SETS = {
                 "serif_candidates": ["georgiab.ttf", "timesbd.ttf", "cambriab.ttf", "constanb.ttf"],
                 "grid_extra_candidates": ["corbelb.ttf", "GOTHICB.TTF"], "lookalikes": ["verdanab.ttf", "tahomabd.ttf"],
                 "caption": "bahnschrift.ttf", "caption_fallback": "segoeuib.ttf", "variable": "bahnschrift.ttf"},
-    "portable": {"dir": PORTABLE_DIR, "sans": "LiberationSans-Bold.ttf", "serif": "DejaVuSerif-Bold.ttf", "arabic": "DejaVuSans-Bold.ttf",
+    "portable": {"dir": PORTABLE_DIR, "sans": "LiberationSans-Bold.ttf", "serif": "DejaVuSerif-Bold.ttf", "arabic": "Amiri-Bold.ttf",
                  "sans_candidates": ["LiberationSans-Bold.ttf", "DejaVuSans-Bold.ttf", "Carlito-Bold.ttf"],
                  "serif_candidates": ["DejaVuSerif-Bold.ttf", "LiberationSerif-Bold.ttf", "Caladea-Bold.ttf"],
                  "grid_extra_candidates": [], "lookalikes": ["DejaVuSans-Bold.ttf", "Carlito-Bold.ttf"],

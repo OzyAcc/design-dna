@@ -13,7 +13,7 @@ ChatGPT Work (or a similar agent host) or adapting it to one. Each point is mark
 | Data formats | `schemas/*.json` (JSON Schema 2020-12) | **portable** |
 | Engine | `scripts/*.py` (Python 3.10+) | **needs the host** to run Python with the packages in `requirements-lock.txt` |
 | Renderer | Playwright driving Chrome / Edge / bundled Chromium | **needs the host** to launch a headless Chromium. Without it, nothing can be rendered or verified, and the capability report says so |
-| Tests | `tests/run_acceptance.py` | **needs the host** plus the Windows system fonts the fixtures use |
+| Tests | `tests/run_acceptance.py` | **needs the host** to run Python + Chromium; fonts are no obstacle: off Windows the suite uses the open-licensed fonts vendored in `tests/fonts/` |
 
 ## Requirements for the host
 

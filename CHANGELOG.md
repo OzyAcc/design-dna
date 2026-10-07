@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+The acceptance suite runs off Windows: the first open item of the audit response.
+
+### Added
+- **Portable font set** for the acceptance suite (`tests/fixtures/fontset.py`, `tests/fonts/`): Liberation Sans/Serif
+  Bold, DejaVu Sans/Serif Bold, Carlito Bold, Caladea Bold, Amiri Bold and Open Sans [wdth,wght], unmodified, with
+  their SIL OFL 1.1 / Bitstream Vera licences and sha256 list. Every font role (the layered reference's sans and
+  serif, the candidate lists, the Arabic + Latin font, T02's non-candidate caption face, T27's variable `wdth` font)
+  comes from the set, and the expected faces are read from the files instead of hard-coded names.
+  Windows machines with Arial and Georgia keep the verified `windows` set; elsewhere `portable` is used;
+  `DESIGN_DNA_FONTSET` forces either. `report.json` records the set and the faces behind each role.
+- CI job `acceptance-linux` (ubuntu-latest, `requirements-lock.txt`, portable fonts, its own evidence artifact).
+
+### Changed
+- T02's caption baselines are held at the ink measurement and only size and x are render-fitted. The model's
+  provenance already declared the baseline as measured from ink; fitting it against a substitute font had moved
+  it by up to 1 px towards the substitute's glyph shapes.
+- T21 uses any second installed browser channel (Edge, Chrome or Playwright's Chromium) for the real drift check,
+  not only Edge; with none it stays unverified.
+- T20 resolves the font-referenced bundle's fonts from the font set's folder (`font_dirs`) as well as the system
+  font folders.
+
 ## [2.0.0] — 2026-10-06
 
 A complete, reviewable package: portable templates, an enforced renderer pin, scoped edits that cannot drift, a

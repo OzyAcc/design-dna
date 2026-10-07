@@ -95,9 +95,11 @@ def main() -> int:
     for i, name in enumerate(labels):
         r, c = divmod(i, a.cols)
         cy0, cy1 = cap_rows[r]
+        # the baseline is the ink measurement (the provenance below says so); fitting it against a substitute font
+        # would trade it for glyph-shape differences, so only size and x are fitted
         fitted.append(tool("fit_text.py", tid, "--region", f"{xs[c] + 10},{cy0 - 8},{size - 20},{cy1 - cy0 + 16}", "--text", name,
                            "--font", best_file, "--size", seed, "--x", xs[c] + size / 2, "--baseline", caps[i]["baseline_y"],
-                           "--fit", "size,x,baseline", "--align", "center", "--object", f"n-caption-{i + 1}"))
+                           "--fit", "size,x", "--align", "center", "--object", f"n-caption-{i + 1}"))
     fsize = round(statistics.median(f["params"]["size"] for f in fitted), 2)
     font = import_asset(tdir, best_file, "font", a.font_source)
     add_evidence(tdir, [{"evidence_id": "ev-transcription", "source_sha256": src, "region": None, "object": "typography",
