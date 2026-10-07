@@ -147,8 +147,27 @@ def guide(reg, h) -> str:
     return "\n".join(L)
 
 
+def manifests() -> dict[Path, str]:
+    """Repository-root manifests that hosts read straight from GitHub, kept in step with VERSION:
+    the Claude Code / Copilot marketplace (.claude-plugin) and the Gemini CLI extension (gemini-extension.json,
+    so `gemini extensions install https://github.com/OzyAcc/design-dna` works without a local folder)."""
+    import json
+
+    out = {}
+    for rel in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"):
+        path = hk.ROOT / rel
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if "version" in data:
+            data["version"] = hk.version()
+        for plugin in data.get("plugins", []):
+            plugin["version"] = hk.version()
+        out[path] = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    out[hk.ROOT / "gemini-extension.json"] = hk.fill(hk.OVERLAYS / "packages" / "gemini-extension.json")
+    return out
+
+
 def targets(reg) -> dict[Path, str]:
-    out = {DOCS / "COMPATIBILITY.md": compatibility(reg)}
+    out = {DOCS / "COMPATIBILITY.md": compatibility(reg), **manifests()}
     for h in reg["hosts"]:
         out[DOCS / f"{h['id']}.md"] = guide(reg, h)
     text = README.read_text(encoding="utf-8")
