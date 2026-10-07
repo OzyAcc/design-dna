@@ -5,6 +5,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, MODES, type Matrix, type Pair, type Product, type ResolvedSlot, type Template } from "../api";
 import { useComposer } from "../components/Composer";
 import { Dev, errText, JobLine, newKey, StatusDot, useJob, useLocal, useToast } from "../lib";
+import { Icon } from "../components/ui";
 
 export default function Generate() {
   const [params, setParams] = useSearchParams();
@@ -67,6 +68,12 @@ export default function Generate() {
         </div>
       </div>
 
+      <div className="summary-cards" aria-label="Batch summary">
+        <div className="summary-card"><Icon name="layers" size={22} /><div><strong>{m.counts.proposed}</strong><small>Proposed outputs</small></div></div>
+        <div className="summary-card"><Icon name="check" size={22} /><div><strong>{m.counts.included}</strong><small>Included in this run</small></div></div>
+        <div className="summary-card"><Icon name="filter" size={22} /><div><strong>{m.counts.blocked}</strong><small>Need attention</small></div></div>
+      </div>
+      {included.some(p => p.mode === "creative") && <div className="notice warn small" style={{ marginBottom: 22 }} role="note"><strong>Creative reference makes imagery without text.</strong> Text slots are not added to creative images in this version. Choose editable template adaptation or a generated photo in the template to use your reviewed headings and CTA.</div>}
       <div className="grid2" style={{ marginBottom: 22 }}>
         <section className="card">
           <h3>Batch defaults <span className="muted small">apply to every output unless a later layer sets a value</span></h3>

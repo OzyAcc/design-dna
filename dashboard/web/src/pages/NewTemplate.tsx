@@ -7,6 +7,7 @@ import CompareViewer from "../components/CompareViewer";
 import ElementCanvas, { type El } from "../components/ElementCanvas";
 import type { ModelView } from "../components/Inspector";
 import { Dev, errText, Events, JobLine, useJob, useToast } from "../lib";
+import { Icon, PageHeader } from "../components/ui";
 
 const STEPS = [["purpose", "Name and purpose"], ["scan", "Scan"], ["rules", "Review rules"], ["rebuild", "Rebuild and compare"], ["save", "Save to library"]] as const;
 type Step = (typeof STEPS)[number][0];
@@ -50,8 +51,7 @@ function Inspiration({ onCreated, via }: { onCreated: (id: string) => void; via:
   const m = asset?.metadata || {};
   return (
     <>
-      <div className="page-head"><div><span className="label">New template · step 1</span><h1>Add inspiration</h1>
-        <p className="lede">Add a finished design you like. The original file is kept byte-for-byte; a separate, correctly oriented sRGB copy is used for measurement.</p></div></div>
+      <PageHeader eyebrow="Build your library · start with a reference" title={<>Add inspiration<span className="title-dot">.</span></>} description="Upload a finished design, paste an image or add a link. We’ll help you turn its parts into a reusable template." actions={<Link className="btn secondary" to="/templates"><Icon name="layers" size={16} />Back to library</Link>} />
       <div className="split">
         <div className="stack">
           {!asset ? (
@@ -89,9 +89,9 @@ function Inspiration({ onCreated, via }: { onCreated: (id: string) => void; via:
               </div>
             </div>
           ) : (
-            <div className="card flat">
+            <div className="card flat scan-intro">
               <span className="label">What happens next</span>
-              <ol className="small" style={{ paddingLeft: 18 }}>
+              <ol>
                 <li>Name it and describe what it is for (your words are labelled as yours).</li>
                 <li>Scan: Claude proposes elements, or you draw them; the engine measures each one.</li>
                 <li>Review what was measured, what was inferred and what stays unknown.</li>

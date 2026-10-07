@@ -11,6 +11,7 @@ import socket
 import threading
 import time
 import unittest
+from pathlib import Path
 
 import support as S
 from support import client, ok
@@ -98,6 +99,12 @@ class T28Browser(unittest.TestCase):
         page.wait_for_load_state("networkidle")
         page.wait_for_timeout(300)
 
+    def screenshot(self, page, filename):
+        if os.environ.get("DNA_UI_SCREENSHOTS"):
+            folder = Path(os.environ["DNA_UI_SCREENSHOTS"])
+            folder.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(folder / filename), full_page=True)
+
     def test_pages_fit_have_named_controls_and_no_errors(self):
         report, problems = {}, []
         for width in (390, 1280):
@@ -114,6 +121,9 @@ class T28Browser(unittest.TestCase):
                 if unnamed:
                     problems.append(f"{width} {path}: controls without an accessible name: {unnamed[:4]}")
                 report[f"{width} {path}"] = {"scroll_width": sw, "unnamed_controls": len(unnamed)}
+                if path in ("/templates", "/templates/new"):
+                    name = "library" if path == "/templates" else "intake"
+                    self.screenshot(page, f"{name}-{width}.png")
             problems += [f"{width}: {e}" for e in errors]
             page.close()
         S.record("T28.pages", report)
@@ -162,6 +172,86 @@ class T28Browser(unittest.TestCase):
         page.close()
         self.assertFalse(errors + errors2, (errors + errors2)[:10])
         S.record("T28.keyboard", {"skip_link": True, "desktop_nav": "/generate", "phone_menu": "/runs"})
+
+    def test_library_views_filters_theme_and_selection(self):
+        page, errors = self.open(1280)
+        page.goto(self.base + "/templates")
+        self.settle(page)
+        page.get_by_role("button", name="List view", exact=True).click()
+        self.assertTrue(page.locator(".cards.list-view").is_visible())
+        page.set_viewport_size({"width": 768, "height": 900})
+        self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), 768, "list view fits a tablet")
+        page.set_viewport_size({"width": 1280, "height": 900})
+        page.reload()
+        self.settle(page)
+        self.assertEqual(page.get_by_role("button", name="List view", exact=True).get_attribute("aria-pressed"), "true")
+        page.get_by_role("button", name="Switch to dark theme", exact=True).click()
+        self.assertEqual(page.locator("html").get_attribute("data-theme"), "dark")
+        self.screenshot(page, "library-dark-1280.png")
+        page.reload()
+        self.settle(page)
+        self.assertEqual(page.locator("html").get_attribute("data-theme"), "dark")
+        page.get_by_role("button", name="Switch to light theme", exact=True).click()
+        page.get_by_role("button", name="Filters", exact=True).click()
+        page.get_by_role("combobox", name="Original or copy", exact=True).select_option("copy")
+        self.settle(page)
+        self.assertGreater(page.locator(".tcard").count(), 0)
+        self.assertTrue(all("Editable copy" in x for x in page.locator(".tcard-specs").all_text_contents()))
+        page.get_by_role("button", name="Clear filters", exact=True).click()
+        self.settle(page)
+        page.locator(".tcard input[type=checkbox]:enabled").first.check()
+        dock = page.get_by_role("region", name="Selected templates", exact=True)
+        self.assertTrue(dock.is_visible())
+        dock.get_by_role("button", name="Create batch", exact=True).click()
+        self.assertTrue(page.locator(".composer").evaluate("el => el.open"))
+        dock.get_by_role("button", name="Clear", exact=True).click()
+        self.assertFalse(dock.is_visible())
+        self.assertFalse(errors, errors[:10])
+        S.record("T28.library_refresh", {"view_persists": True, "theme_persists": True, "copy_filter": True, "selection_dock": True})
+        page.close()
+
+    def test_command_search_navigation_escape_and_focus(self):
+        page, errors = self.open(1280)
+        page.goto(self.base + "/templates")
+        self.settle(page)
+        trigger = page.get_by_role("button", name="Search pages and templates", exact=True)
+        trigger.click()
+        dialog = page.get_by_role("dialog", name="Find your next step", exact=True)
+        self.assertTrue(dialog.is_visible())
+        page.keyboard.press("Escape")
+        self.assertFalse(dialog.is_visible())
+        self.assertTrue(trigger.evaluate("el => el === document.activeElement"))
+        page.keyboard.press("Control+k")
+        self.assertTrue(dialog.is_visible())
+        dialog.get_by_role("searchbox", name="Search pages and templates", exact=True).fill("Results")
+        page.keyboard.press("Enter")
+        page.wait_for_url("**/runs")
+        self.settle(page)
+        self.assertFalse(dialog.is_visible())
+        self.assertFalse(errors, errors[:10])
+        S.record("T28.command", {"shortcut": True, "navigation": "/runs", "escape": True, "focus_restored": True})
+        page.close()
+
+    def test_product_drawer_traps_focus_and_escape_restores_trigger(self):
+        page, errors = self.open(390)
+        page.goto(self.base + "/templates")
+        self.settle(page)
+        page.locator(".composer summary").click()
+        trigger = page.get_by_role("button", name="Add product", exact=True)
+        trigger.click()
+        dialog = page.get_by_role("dialog", name="Add a product", exact=True)
+        self.assertTrue(dialog.is_visible())
+        dialog.get_by_label("Name", exact=True).fill("Keyboard product input")
+        for _ in range(20):
+            page.keyboard.press("Tab")
+            self.assertTrue(page.evaluate("!!document.activeElement.closest('dialog')"), "focus stays inside the product drawer")
+        page.keyboard.press("Escape")
+        self.assertFalse(dialog.is_visible())
+        self.assertTrue(trigger.evaluate("el => el === document.activeElement"))
+        self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), 390)
+        self.assertFalse(errors, errors[:10])
+        S.record("T28.product_drawer", {"native_modal": True, "focus_contained": True, "escape": True, "focus_restored": True})
+        page.close()
 
 
 if __name__ == "__main__":

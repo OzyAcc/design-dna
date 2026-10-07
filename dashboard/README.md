@@ -18,6 +18,8 @@ its own copy. Every result says what was actually checked.
   and exports.
 
 Status, evidence and limits are in [docs/DASHBOARD-REPORT.md](../docs/DASHBOARD-REPORT.md).
+The refreshed interface, interaction rules and browser checks are documented in
+[docs/DASHBOARD-UI-UX-REFRESH.md](../docs/DASHBOARD-UI-UX-REFRESH.md).
 
 ## Run it locally
 
