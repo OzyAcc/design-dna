@@ -13,7 +13,7 @@ An Agent Skill (<code>reverse-design</code>) for ChatGPT, Codex, Claude, Cursor,
 <img alt="Agent Skill" src="https://img.shields.io/badge/Agent%20Skill-16%20install%20targets-c8102e?style=flat-square">
 <a href="https://github.com/OzyAcc/design-dna/actions/workflows/acceptance.yml"><img alt="acceptance" src="https://img.shields.io/github/actions/workflow/status/OzyAcc/design-dna/acceptance.yml?branch=main&label=acceptance&style=flat-square"></a>
 <img alt="Acceptance checks" src="https://img.shields.io/badge/acceptance-32%2F32%20%2B%201%20unverified-1f5d1a?style=flat-square">
-<img alt="Platform" src="https://img.shields.io/badge/verified%20on-Windows%20%7C%20Chrome%2FEdge-6f675e?style=flat-square">
+<img alt="Platform" src="https://img.shields.io/badge/verified%20on-Windows%20%7C%20Linux%20%7C%20Chrome%2FEdge-6f675e?style=flat-square">
 </p>
 
 <p>
@@ -326,8 +326,9 @@ design-dna/
 
 - Verified on Windows 10 with Python 3.12, Chrome 154 and Edge 154 (CI: `windows-latest`, preinstalled browsers),
   using Windows system fonts (Arial, Georgia, Bahnschrift, …).
-- Linux: the suite passes with the portable font set ([tests/fonts](skills/reverse-design/tests/fonts/README.md))
-  on Ubuntu 24.04 with Playwright's Chromium (one local run; CI job `acceptance-linux` added). macOS is untested.
+- Verified on Linux with the portable font set ([tests/fonts](skills/reverse-design/tests/fonts/README.md)):
+  CI job `acceptance-linux` on every push and pull request (`ubuntu-latest`, Chrome 154, Edge for the drift test).
+  macOS is untested.
 - The only font files in the repository are the acceptance suite's open-licensed test fonts
   ([tests/fonts](skills/reverse-design/tests/fonts/README.md)). Bundles can embed fonts (check the licences before
   sharing) or reference them by sha256 so they resolve from local font folders.
