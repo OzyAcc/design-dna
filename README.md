@@ -133,7 +133,9 @@ The working store (`~/design-dna`) is a cache. Templates persist as bundles in w
 
 The acceptance suite runs in an isolated store and keeps every input and output
 (`skills/reverse-design/tests/run_acceptance.py`, about 30 minutes on Windows). Latest run: **32/32 passed, 1 entry
-unverified by design**. Results are grouped by kind, so a pass never hides what kind of claim it supports.
+unverified by design**. Off Windows the suite uses open-licensed test fonts: a Linux run passed 31/31 with 2
+unverified (no second browser channel for T21). Results are grouped by kind, so a pass never hides what kind of claim
+it supports.
 
 <img src="docs/images/demo-rebuild.png" alt="Concept illustration of a flat reference, separated editable layers and a rebuild" width="100%">
 
@@ -245,9 +247,10 @@ design-dna/
 
 ## Platform notes
 
-- Verified on Windows 10 with Python 3.12, Chrome 154 and Edge 154 (CI: `windows-latest`, preinstalled browsers).
-  The engine is pure Python + Chromium and should run on macOS/Linux, but the acceptance fixtures currently use
-  Windows system fonts (Arial, Georgia, Bahnschrift, …).
+- Verified on Windows 10 with Python 3.12, Chrome 154 and Edge 154 (CI: `windows-latest`, preinstalled browsers),
+  using Windows system fonts (Arial, Georgia, Bahnschrift, …).
+- Linux: the suite passes with the portable font set ([tests/fonts](skills/reverse-design/tests/fonts/README.md))
+  on Ubuntu 24.04 with Playwright's Chromium (one local run; CI job `acceptance-linux` added). macOS is untested.
 - The only font files in the repository are the acceptance suite's open-licensed test fonts
   ([tests/fonts](skills/reverse-design/tests/fonts/README.md)). Bundles can embed fonts (check the licences before
   sharing) or reference them by sha256 so they resolve from local font folders.

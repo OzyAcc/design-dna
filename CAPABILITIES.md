@@ -90,7 +90,8 @@ Every row is one of:
 | | Status |
 |---|---|
 | Windows 10/11, Python 3.12, Chrome 154 / Edge 154 | tested (local + GitHub Actions `windows-latest`) |
-| macOS / Linux | partial: the engine is pure Python + Chromium, but the acceptance fixtures use Windows system fonts |
+| Linux (Ubuntu 24.04), Python 3.13, Playwright's Chromium 141, portable test fonts | tested locally: 31/31, 2 unverified (T21 needs a second browser channel; T23 by design). CI job `acceptance-linux` added |
+| macOS | untested: the engine and the portable suite have no Windows dependency left |
 
 Exact tested versions: [`requirements-lock.txt`](requirements-lock.txt).
 

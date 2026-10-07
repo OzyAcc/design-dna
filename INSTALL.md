@@ -7,7 +7,7 @@
 | Python | 3.12.10 | 3.10 |
 | Packages | `requirements-lock.txt` (exact) | `requirements.txt` (minimums) |
 | Renderer | Google Chrome 154.0.8037.93; Microsoft Edge 154 | any Chromium Playwright can drive; `python -m playwright install chromium` if neither browser is installed |
-| OS | Windows 10 / 11 (local + GitHub Actions) | macOS / Linux: the engine runs; the acceptance suite uses the portable font set (below) |
+| OS | Windows 10 / 11 (local + GitHub Actions); Linux (Ubuntu 24.04, portable fonts) | macOS: untested |
 
 ## Option 1: Claude Code plugin
 

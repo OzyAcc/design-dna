@@ -90,7 +90,7 @@ def grid_flattened(out: Path):
     face = Path(fontset.path("caption") or fontset.path("caption_fallback"))
     font = ImageFont.truetype(str(face), 30)
     if face.name == fontset.SETS[fontset.name()]["caption"]:
-        font.set_variation_by_name("Bold")
+        font.set_variation_by_name(fontset.SETS[fontset.name()]["caption_instance"])
     mask = Image.new("L", (size, size), 0)
     ImageDraw.Draw(mask).rounded_rectangle([0, 0, size - 1, size - 1], radius, fill=255)
     d = ImageDraw.Draw(canvas)

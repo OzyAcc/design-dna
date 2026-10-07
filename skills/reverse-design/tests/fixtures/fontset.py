@@ -15,19 +15,21 @@ PORTABLE_DIR = Path(__file__).resolve().parents[1] / "fonts"
 WINDOWS_DIR = Path("C:/Windows/Fonts")
 
 # sans / serif: the true faces of the layered reference (T01 must rank them first among their candidates).
-# arabic: covers Latin and Arabic (adaptation tests). caption: draws T02's captions and is never a candidate.
+# arabic: covers Latin and Arabic (adaptation tests). caption: draws T02's captions (at caption_instance of the
+# variable font) and is never a candidate.
 # variable: has a `wdth` axis (T27). lookalikes: the other candidates next to T03's renamed duplicate.
 SETS = {
     "windows": {"dir": WINDOWS_DIR, "sans": "arialbd.ttf", "serif": "georgiab.ttf", "arabic": "arialbd.ttf",
                 "sans_candidates": ["arialbd.ttf", "verdanab.ttf", "tahomabd.ttf", "segoeuib.ttf", "calibrib.ttf", "trebucbd.ttf"],
                 "serif_candidates": ["georgiab.ttf", "timesbd.ttf", "cambriab.ttf", "constanb.ttf"],
                 "grid_extra_candidates": ["corbelb.ttf", "GOTHICB.TTF"], "lookalikes": ["verdanab.ttf", "tahomabd.ttf"],
-                "caption": "bahnschrift.ttf", "caption_fallback": "segoeuib.ttf", "variable": "bahnschrift.ttf"},
+                "caption": "bahnschrift.ttf", "caption_instance": "Bold", "caption_fallback": "segoeuib.ttf", "variable": "bahnschrift.ttf"},
     "portable": {"dir": PORTABLE_DIR, "sans": "LiberationSans-Bold.ttf", "serif": "DejaVuSerif-Bold.ttf", "arabic": "Amiri-Bold.ttf",
                  "sans_candidates": ["LiberationSans-Bold.ttf", "DejaVuSans-Bold.ttf", "Carlito-Bold.ttf"],
                  "serif_candidates": ["DejaVuSerif-Bold.ttf", "LiberationSerif-Bold.ttf", "Caladea-Bold.ttf"],
                  "grid_extra_candidates": [], "lookalikes": ["DejaVuSans-Bold.ttf", "Carlito-Bold.ttf"],
-                 "caption": "OpenSans-wdth-wght.ttf", "caption_fallback": None, "variable": "OpenSans-wdth-wght.ttf"},
+                 "caption": "OpenSans-wdth-wght.ttf", "caption_instance": "Bold", "caption_fallback": None,
+                 "variable": "OpenSans-wdth-wght.ttf"},
 }
 
 
@@ -36,6 +38,9 @@ def name() -> str:
     if forced:
         if forced not in SETS:
             raise SystemExit(f"DESIGN_DNA_FONTSET={forced!r}: expected one of {sorted(SETS)}")
+        missing = [f for f in (SETS[forced]["sans"], SETS[forced]["serif"]) if not (SETS[forced]["dir"] / f).exists()]
+        if missing:
+            raise SystemExit(f"DESIGN_DNA_FONTSET={forced}: {missing} not found in {SETS[forced]['dir']}")
         return forced
     win = SETS["windows"]
     return "windows" if all((WINDOWS_DIR / win[k]).exists() for k in ("sans", "serif")) else "portable"
@@ -73,6 +78,11 @@ def summary() -> dict:
     """Which set ran and the faces behind each role (recorded in the acceptance report)."""
     s = SETS[name()]
     one = {k: full_name(path(k)) if path(k) else None for k in ("sans", "serif", "arabic", "caption", "variable")}
+    if one["caption"]:
+        one["caption"] += f" ({s['caption_instance']} instance)"
+    elif path("caption_fallback"):
+        one["caption"] = full_name(path("caption_fallback"))
     return {"fontset": name(), "dir": font_dir().as_posix(), **one,
             "candidates": {k: [full_name(p) for p in paths(k)] for k in ("sans_candidates", "serif_candidates", "grid_extra_candidates")},
-            "files": sorted({f for k, v in s.items() if k != "dir" for f in (v if isinstance(v, list) else [v]) if f})}
+            "files": sorted({f for k, v in s.items() if k not in ("dir", "caption_instance")
+                             for f in (v if isinstance(v, list) else [v]) if f})}
