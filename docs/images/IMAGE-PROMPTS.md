@@ -103,3 +103,37 @@ Second card has mono header "POSITION". Show a simple custom geometric black two
 Keep both cards light, tactile and editorial. No black heatmap, no PASS or FAIL labels, no generated scores, no SSIM value, no percentage, no actual pixel-distance claim. Tiny legible footer "ILLUSTRATIVE COMPARISON". All words crisp and within safe margins.
 ```
 
+## Explainer series (2.1): how-it-works.png … use-it-in-your-ai-tool.png
+
+Generated in ChatGPT with banner.png attached as the style reference, one image per message, from this prompt
+(the per-image briefs below share it). The product changed from the handbag to a lamp in generation; the posters are
+concept illustrations, not engine output.
+
+```text
+Shared style: match banner.png: warm ivory paper #F6F2EA with subtle grain, near-black ink #16130F, crisp crimson
+#C8102E; large refined editorial serif headlines, small crisp monospace labels, generous negative space, thin
+precise rules, soft realistic shadows; landscape 16:9. Recurring motif: the cream product poster with "NEW SEASON",
+the serif headline "Made for every day.", a thin crimson rule, a photoreal product in a softly lit studio frame and
+a small crimson "Explore" pill. Text exactly as written; tiny footer "CONCEPT ILLUSTRATION". Never: numbers or
+measurements, percentages, scores, PASS/FAIL/VERIFIED badges, code, JSON, dashboards, browser chrome, company or
+product logos, DNA helices, robots, circuit graphics, gibberish micro-text.
+```
+
+| File | Headline | Brief |
+|---|---|---|
+| how-it-works.png | From one image to a reusable template. | six stages on a crimson line: REFERENCE, SCAN, MEASURE, MODEL, VERIFY, TEMPLATE; subline "Read the design. Rebuild it. Reuse it." |
+| every-claim-has-a-source.png | Every claim has a source. | leader lines from the poster to four tags: MEASURED (size and position read from pixels), OBSERVED (seen directly), INFERRED (best explanation), UNKNOWN (font name not claimed); subline "Unknown stays unknown." |
+| change-one-thing.png | Change one thing. Keep everything else. | BEFORE / AFTER (only the headline changed) / DIFFERENCE (only the headline area marked); a padlock "LOCKED" on the Explore pill; subline "Only what you asked for changes." |
+| take-your-template-anywhere.png | Take your template anywhere. | an opened "TEMPLATE BUNDLE" with PASSPORT, LAYERS, IMAGES, FONTS, APPROVED RENDER, VERSIONS; SESSION A → LIBRARY → SESSION B, "fetch by name"; subline "Save once. Continue later, anywhere." |
+| same-browser-same-pixels.png | Same browser, same pixels. | a "PINNED BROWSER" tag, a generic second browser with a "DRIFT" stop marker, then PREVIEW DIFFERENCES → CONFIRM → NEW PIN; subline "No silent changes. Moving on is a choice." |
+| use-it-in-your-ai-tool.png | Use it in your AI tool. | columns CHATGPT FIRST (ChatGPT Skills, Codex, Instruction kit), ON YOUR COMPUTER (Claude Code, GitHub Copilot, Gemini CLI, Cursor, Windsurf, Cline, Roo Code, OpenCode), WHAT YOU GET (Full engine, Hosted sandbox, Method only); subline "One skill. Installed where you already work." |
+
+In change-one-thing.png the generator set the new headline's second line slightly smaller. The engine itself never
+shrinks text to fit unless the node's fit policy allows it; under a strict fit it reports a conflict instead (T07,
+T17).
+
+## Concept case studies: case-template-adaptation.png, case-inspiration-to-template.png, case-soft-form.png
+
+Supplied by the maintainer with the explainer series; prompts not recorded. They show the intended division of
+labour: the template keeps layout, typography and image treatment, while the photographs, material samples and
+copy come from the user. Design DNA does not generate photographs or textures.
