@@ -1,6 +1,6 @@
 // Batch composer: products x template versions -> independently editable outputs, reviewed before anything is generated.
 // Copy precedence: template defaults -> batch defaults -> product overrides -> pair overrides -> what you type per output.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, MODES, type Matrix, type Pair, type Product, type ResolvedSlot, type Template } from "../api";
 import { useComposer } from "../components/Composer";
@@ -55,8 +55,10 @@ export default function Generate() {
       <div className="page-head">
         <div>
           <span className="label">Generate · content review</span>
-          <input aria-label="Batch name" className="h1-input" defaultValue={b.name} onBlur={(e) => e.target.value !== b.name && patchBatch({ name: e.target.value })}
-                 style={{ font: "600 30px var(--serif)", border: 0, background: "transparent", padding: 0, width: "100%" }} />
+          <h1 style={{ margin: 0 }}>
+            <input aria-label="Batch name" className="h1-input" defaultValue={b.name} onBlur={(e) => e.target.value !== b.name && patchBatch({ name: e.target.value })}
+                   style={{ font: "600 30px var(--serif)", border: 0, background: "transparent", padding: 0, width: "100%" }} />
+          </h1>
           <p className="lede">{m.counts.proposed} proposed · <strong>{m.counts.included} included</strong> · {m.counts.excluded} excluded{m.counts.blocked ? <> · <span style={{ color: "var(--crimson)" }}>{m.counts.blocked} need attention</span></> : null}</p>
         </div>
         <div className="row">
@@ -146,7 +148,7 @@ function DefaultCopy({ role, value, onSave }: { role: string; value?: string; on
   return (
     <div className="field">
       <span className="label">{role} for all outputs {value !== undefined && <button className="btn ghost small" onClick={() => onSave(null)}>clear</button>}</span>
-      <input type="text" value={v} placeholder="not set" onChange={(e) => setV(e.target.value)} onBlur={() => v !== (value ?? "") && onSave(v)} dir="auto" />
+      <input type="text" aria-label={`${role} for all outputs`} value={v} placeholder="not set" onChange={(e) => setV(e.target.value)} onBlur={() => v !== (value ?? "") && onSave(v)} dir="auto" />
     </div>
   );
 }
@@ -192,14 +194,15 @@ function SlotEditor({ s, onSave, onUseDraft, onApprove, unsentKey }: { s: Resolv
   };
   const lim = s.limits || {};
   const isManual = s.source === "manual" || s.source === "AI draft";
+  const srcId = useId();
   return (
     <div className={`slot-field ${s.problems.length ? "problem" : ""}`}>
       <div className="row between">
         <span className="label">{s.role}{s.required ? " · required" : ""}{lim.max_chars ? ` · ≤ ${lim.max_chars} chars` : ""}{lim.max_lines ? ` · ≤ ${lim.max_lines} line(s)` : ""}</span>
-        <span className="slot-src">{s.locked.length ? "locked by template" : s.hidden ? "hidden (no copy)" : s.source ? `from ${s.source}` : "not set"}{unsent !== null ? " · saving…" : ""}</span>
+        <span className="slot-src" id={srcId}>{s.locked.length ? "locked by template" : s.hidden ? "hidden (no copy)" : s.source ? `from ${s.source}` : "not set"}{unsent !== null ? " · saving…" : ""}</span>
       </div>
       {s.locked.length ? <p className="small" style={{ whiteSpace: "pre-wrap" }}>{s.value}</p> : (
-        <textarea rows={Math.max(1, Math.min(4, (v.match(/\n/g) || []).length + 1))} value={v} onChange={(e) => change(e.target.value)} dir="auto"
+        <textarea aria-label={`${s.role} copy`} aria-describedby={srcId} rows={Math.max(1, Math.min(4, (v.match(/\n/g) || []).length + 1))} value={v} onChange={(e) => change(e.target.value)} dir="auto"
                   placeholder={s.template_text ? `reference text (not used unless you choose it): “${s.template_text.replace(/\n/g, " / ")}”` : "type copy for this output"} />
       )}
       {!s.locked.length && (

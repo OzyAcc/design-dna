@@ -26,3 +26,17 @@ def job_finished(job: dict, status: str, result, error) -> None:
                     db.update(conn, "templates", job["template_id"], {"draft": d, "draft_revision": t["draft_revision"] + 1})
     finally:
         conn.close()
+
+
+def job_requeued(job: dict) -> None:
+    """A job re-queued after its worker stopped: its output waits again (no files were promised)."""
+    if not job.get("output_id"):
+        return
+    conn = db.connect()
+    try:
+        o = db.one(conn, "SELECT status FROM outputs WHERE id = ?", (job["output_id"],))
+        if o and o["status"] == "running":
+            with db.tx(conn):
+                db.update(conn, "outputs", job["output_id"], {"status": "queued", "updated_at": db.now()})
+    finally:
+        conn.close()

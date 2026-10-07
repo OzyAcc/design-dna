@@ -44,7 +44,8 @@ class Cancelled(Exception):
 def _env(home: Path) -> dict:
     s = config.get()
     env = dict(os.environ)
-    env.update(DESIGN_DNA_HOME=str(home), DNA_ENGINE_DIR=str(s.engine_dir), PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
+    env.update(DESIGN_DNA_HOME=str(home), DNA_ENGINE_DIR=str(s.engine_dir), PYTHONUTF8="1", PYTHONIOENCODING="utf-8",
+               DNA_PARENT_PID=str(os.getpid()))
     env.pop("PYTHONPATH", None)
     return env
 

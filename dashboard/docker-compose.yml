@@ -1,0 +1,36 @@
+# Design DNA dashboard: the web app and a separate durable worker sharing one data volume.
+#   cp dashboard/.env.example dashboard/.env   # set DNA_AUTH_TOKEN (required) and optional provider keys
+#   docker compose -f dashboard/docker-compose.yml up --build
+# Then open http://127.0.0.1:8765 and sign in with DNA_AUTH_TOKEN.
+name: design-dna-dashboard
+
+x-common: &common
+  build:
+    context: ..
+    dockerfile: dashboard/Dockerfile
+  image: design-dna-dashboard:local
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DNA_DATA_DIR: /data
+    DNA_AUTH_TOKEN: ${DNA_AUTH_TOKEN:?set DNA_AUTH_TOKEN in dashboard/.env}
+  volumes:
+    - dna-data:/data
+  restart: unless-stopped
+
+services:
+  web:
+    <<: *common
+    command: ["python", "-m", "dna_dashboard", "serve"]
+    ports:
+      - "127.0.0.1:${DNA_PUBLISH_PORT:-8765}:8765"
+  worker:
+    <<: *common
+    command: ["python", "-m", "dna_dashboard", "worker"]
+    healthcheck:
+      disable: true
+    stop_grace_period: 60s
+
+volumes:
+  dna-data:

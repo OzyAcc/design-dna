@@ -41,7 +41,10 @@ class Ctx:
 
     @property
     def home(self) -> Path:
-        return self.dir / "home"
+        """The job's private engine store. A re-run after a worker crash gets a fresh store; the interrupted
+        attempt's store stays next to it as evidence."""
+        n = int(self.job.get("attempts") or 1)
+        return self.dir / ("home" if n <= 1 else f"home-attempt-{n}")
 
     def stage(self, name, message=None, data=None):
         if self.cancelled():
@@ -104,6 +107,27 @@ def after_finish(job: dict, status: str, result, error) -> None:
     hooks.job_finished(job, status, result, error)
 
 
+def recover() -> list[dict]:
+    """Reclaim jobs whose worker died (expired lease) and bring outputs/templates in step with the new job state."""
+    from . import hooks
+
+    conn = db.connect()
+    try:
+        rec = jobs.recover(conn)
+    finally:
+        conn.close()
+    for r in rec:
+        j = r.pop("record")
+        try:
+            if r["action"] == "requeued":
+                hooks.job_requeued(j)
+            else:
+                hooks.job_finished(j, j["status"], None, j.get("error"))
+        except Exception:
+            traceback.print_exc()
+    return rec
+
+
 def run_one(worker_id: str) -> bool:
     s = config.get()
     conn = db.connect()
@@ -146,8 +170,8 @@ def main(threads: int | None = None, once=False) -> int:
     s = config.get()
     conn = db.connect()
     db.migrate(conn)
-    rec = jobs.recover(conn)
     conn.close()
+    rec = recover()
     if rec:
         print(f"recovered {len(rec)} interrupted job(s): {rec}", flush=True)
     base = f"{socket.gethostname()}:{os.getpid()}"
@@ -166,11 +190,7 @@ def main(threads: int | None = None, once=False) -> int:
     while not stop.is_set():
         stop.wait(5)
         if time.time() - last > 60:  # another worker may have died: reclaim its expired leases
-            c = db.connect()
-            try:
-                jobs.recover(c)
-            finally:
-                c.close()
+            recover()
             last = time.time()
     for t in ts:
         t.join(timeout=30)

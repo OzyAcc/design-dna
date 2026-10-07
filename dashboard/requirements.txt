@@ -1,0 +1,7 @@
+# Design DNA dashboard (web app + API + worker). Tested with the versions in requirements-lock.txt on Python 3.12/3.13.
+-r ../skills/reverse-design/requirements.txt
+fastapi>=0.115
+uvicorn>=0.30
+python-multipart>=0.0.9
+anthropic>=1.11
+openai>=3.26

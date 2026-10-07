@@ -159,7 +159,25 @@ def op_fingerprint(r):
 OPS = {k[3:]: v for k, v in globals().items() if k.startswith("op_")}
 
 
+def _die_with_parent() -> None:
+    """If the worker that started this step is killed, stop too (Linux), so an orphaned engine step can never keep
+    writing into a store that a recovered job is about to use."""
+    if not sys.platform.startswith("linux"):
+        return
+    try:
+        import ctypes
+        import signal
+
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGKILL)  # PR_SET_PDEATHSIG
+    except (OSError, AttributeError):
+        return
+    parent = os.environ.get("DNA_PARENT_PID")
+    if parent and os.getppid() != int(parent):  # the parent already died before prctl took effect
+        os._exit(3)
+
+
 def main() -> int:
+    _die_with_parent()
     name = sys.argv[1]
     req = json.loads(sys.stdin.read() or "{}")
     from common import DnaError

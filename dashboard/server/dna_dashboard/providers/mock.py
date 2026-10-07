@@ -8,6 +8,8 @@ measurement tools receive plausible regions; it labels everything as mock propos
 from __future__ import annotations
 
 import io
+import os
+import time
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
@@ -79,6 +81,7 @@ class MockProvider(Provider):
         return {"drafts": drafts}, {"provider": "mock", "model": "mock", "request_id": "mock-copy", "mock": True}
 
     def generate(self, images, prompt, size, track, quality="high"):
+        time.sleep(float(os.environ.get("DNA_MOCK_DELAY_SECONDS") or 0))  # tests: hold the request "in flight"
         if self.fail:
             raise ProviderError(self.name, self.fail, f"mock failure: {self.fail}")
         w, h = (int(v) for v in size.split("x"))

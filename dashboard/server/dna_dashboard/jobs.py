@@ -133,6 +133,8 @@ def recover(conn) -> list[dict]:
                 conn.execute("UPDATE jobs SET status = 'queued', lease_owner = NULL, lease_expires = NULL WHERE id = ?", (j["id"],))
                 event(conn, j["id"], "re-queued after the worker stopped (no provider request was in flight)", stage="queued", level="warning")
                 out.append({"job": j["id"], "action": "requeued"})
+    for o in out:
+        o["record"] = get(conn, o["job"])
     return out
 
 

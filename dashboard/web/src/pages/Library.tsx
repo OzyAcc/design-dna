@@ -119,7 +119,7 @@ export default function Library() {
             {Object.entries(READINESS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
           <select aria-label="Original or copy" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })}>
-            <option value="">Originals and copies</option><option value="original">Originals</option><option value="copy">Copies</option>
+            <option value="">All templates</option><option value="original">Originals</option><option value="copy">Copies</option>
           </select>
           <div className="row" style={{ flexWrap: "nowrap" }}>
             <select aria-label="Sort" value={f.sort} onChange={(e) => setF({ ...f, sort: e.target.value })}>

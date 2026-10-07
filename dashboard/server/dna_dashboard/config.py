@@ -56,6 +56,7 @@ class Settings:
     lease_seconds: int
     web_dist: Path
     secrets: dict = field(default_factory=dict)
+    secrets_mtime: int | None = None
 
     # ------------------------------------------------------------ derived paths
     @property
@@ -94,12 +95,31 @@ class Settings:
     def secrets_path(self) -> Path:
         return self.data_dir / "secrets.json"
 
+    def refresh_secrets(self) -> None:
+        """Re-read secrets.json when it changed, so a key saved on the Settings page (web process) reaches a
+        separately running worker without a restart."""
+        try:
+            m = self.secrets_path.stat().st_mtime_ns
+        except OSError:
+            self.secrets, self.secrets_mtime = {}, None
+            return
+        if m != self.secrets_mtime:
+            try:
+                self.secrets = json.loads(self.secrets_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                self.secrets = {}
+            self.secrets_mtime = m
+
     def secret(self, name: str) -> str | None:
-        return os.environ.get(name) or self.secrets.get(name) or None
+        if os.environ.get(name):
+            return os.environ[name]
+        self.refresh_secrets()
+        return self.secrets.get(name) or None
 
     def secret_source(self, name: str) -> str | None:
         if os.environ.get(name):
             return "environment"
+        self.refresh_secrets()
         if self.secrets.get(name):
             return "settings"
         return None
@@ -117,7 +137,7 @@ class Settings:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f)
         os.replace(tmp, self.secrets_path)
-        self.secrets = data
+        self.secrets, self.secrets_mtime = data, self.secrets_path.stat().st_mtime_ns
 
     def is_loopback(self) -> bool:
         try:
@@ -156,11 +176,7 @@ def load() -> Settings:
         web_dist=Path(os.environ.get("DNA_WEB_DIST") or WEB_DIST),
     )
     s.ensure_dirs()
-    if s.secrets_path.exists():
-        try:
-            s.secrets = json.loads(s.secrets_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            s.secrets = {}
+    s.refresh_secrets()
     return s
 
 

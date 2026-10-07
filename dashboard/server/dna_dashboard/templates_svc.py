@@ -277,6 +277,9 @@ def create_version(conn, t: dict, home: Path, engine_id: str, created_from: str,
                         "preserve": ((t.get("passport") or {}).get("preserve") or {}).get("value")}
     thumb = vroot / f"v{n}.thumb.png"
     src_img = ex / summ["baseline"]["approved"]["path"] if summ["baseline"]["approved"] else ex / "source" / "canonical.png"
+    if design_variant and design_head:  # an edited copy: picture the version's own design head, not the inherited baseline
+        res = engine.call("preview", {"engine_id": engine_id, "variant": design_variant, "ops": [], "out": str(tmp / "head-render")}, home, timeout=600)
+        src_img = Path(res["png"])
     with Image.open(src_img) as im:
         im = im.convert("RGBA")
         im.thumbnail((640, 640))

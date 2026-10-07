@@ -35,6 +35,10 @@ import fixtures  # noqa: E402
 config.reset()
 client = TestClient(create_app())
 
+# re-exported for the test modules (handlers is imported so every job kind is registered with the worker)
+__all__ = ["DATA", "EVIDENCE", "HERE", "client", "config", "create_app", "db", "fixtures", "handlers", "jobs", "providers", "worker",
+           "record", "ok", "drain", "job", "upload", "base_template", "copy_of", "product", "serve", "png_bytes"]
+
 
 def record(name: str, data) -> None:
     with open(EVIDENCE / "results.jsonl", "a", encoding="utf-8") as f:

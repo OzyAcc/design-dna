@@ -60,6 +60,7 @@ export default function App() {
   if (auth.required && !auth.authenticated) return <Login onDone={check} />;
   return (
     <div className="shell">
+      <a className="skip" href="#main">Skip to content</a>
       <header className="topbar">
         <button className="btn ghost small" aria-expanded={menu} aria-controls="sidebar" onClick={() => setMenu(!menu)}>☰ Menu</button>
         <span className="brand-name">Design DNA</span>
@@ -83,7 +84,7 @@ export default function App() {
           {auth.required && <button className="btn ghost small" onClick={async () => { await api.post("/api/auth/logout"); check(); }}>Sign out</button>}
         </div>
       </nav>
-      <main className="main" id="main">
+      <main className="main" id="main" tabIndex={-1}>
         {mock && <div className="banner crimson" role="note">Mock providers are enabled (test mode). Their proposals and images are labelled “mock” and are not real analysis or generation.</div>}
         <Routes>
           <Route path="/" element={<Navigate to="/templates" replace />} />

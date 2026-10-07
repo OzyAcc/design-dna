@@ -51,8 +51,8 @@ def runtime(refresh: int = 0, conn=Depends(get_conn)):
     return {"version": __version__, "engine": caps, "python": engine.python_info(), "data_dir": str(s.data_dir),
             "auth_required": bool(s.auth_token), "bind": f"{s.host}:{s.port}", "mock_providers_enabled": s.enable_mock_providers,
             "queue": {"queued": queued, "running": running, "last_started": last["t"] if last else None},
-            "limits": {"upload_mb": s.max_upload_bytes // 1_000_000, "megapixels": s.max_pixels // 1_000_000,
-                       "link_timeout_s": s.fetch_timeout, "link_mb": s.fetch_max_bytes // 1_000_000},
+            "limits": {"upload_mb": s.max_upload_bytes // (1024 * 1024), "megapixels": s.max_pixels // 1_000_000,
+                       "link_timeout_s": s.fetch_timeout, "link_mb": s.fetch_max_bytes // (1024 * 1024)},
             "adapters": {"raster_intake": "implemented", "web_page_image_picker": "implemented (declared images only)",
                          "pdf_psd_figma_ai_motion_3d": "unavailable: no adapter", "background_removal": "unavailable: no adapter",
                          "ocr": "unavailable: transcriptions are reviewed by a person (optionally proposed by Claude)"}}
