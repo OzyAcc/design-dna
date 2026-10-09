@@ -1,6 +1,6 @@
 {
   "name": "design-dna",
-  "version": "2.1.0-dev",
+  "version": "2.1.0",
   "description": "Reverse-engineer a visual design into an evidence-backed, editable template, rebuild it measurably, and adapt it without drift (skill: reverse-design).",
   "author": {
     "name": "OzyAcc",

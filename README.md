@@ -82,7 +82,8 @@ OpenCode, Kiro, Junie, Goose) the full engine works once Python and a Chromium b
 rendering needs its browser, and templates persist only as bundles you download. The **instruction kit** is a
 labelled fallback that measures nothing. Feature-by-feature table: [compatibility registry](docs/hosts/COMPATIBILITY.md#what-works-at-each-capability-level).
 
-Download links point at the latest release. Until a release carries them, build any package yourself:
+Download links point at the latest release (2.1.0 and later carry every package; the skills are about 130 KB by
+design, and a file of a few bytes is a failed download). To build any package yourself:
 `python install.py package --target all` writes them to `dist/packages/`.
 
 ## What's new in 2.0

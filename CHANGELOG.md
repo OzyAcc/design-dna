@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-10-09
+
 Design DNA installs in every AI tool that can load it, starting with ChatGPT, from one skill and one engine; the
 acceptance suite runs off Windows (the first open item of the audit response); and a web dashboard turns the engine
 into a template library with batch generation.
@@ -113,6 +115,11 @@ into a template library with batch generation.
   failing verification check), so a CI log explains it without downloading the evidence.
 
 ### Fixed
+- **Download links that returned nothing.** The README and guide links (ChatGPT skill, Claude skill, instruction
+  kit, plugins) point at the latest release, but no release had carried those files, so every link answered 404
+  with a 9-byte "Not Found" body. Pushing a version tag now publishes the release with every package attached,
+  and the workflow downloads each file back from the release and compares it with the build. The guides say
+  what a correct download holds (the ChatGPT and Claude skills are about 130 KB by design).
 - Dashboard audit of 2026-10-07 (D1–D4; details in `docs/DASHBOARD-REPORT.md`):
   - **Generate used content the server had not received.** Composer changes now go through one ordered write queue;
     Generate, fit previews and AI drafting wait until every change is acknowledged and stop if one cannot be saved.
