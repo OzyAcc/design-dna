@@ -100,6 +100,13 @@ class T28Browser(_Browser):
         hs = next(s for s in pr["slots"] if s["role"] == "headline")["slot_id"]
         ok(client.patch(f"/api/batches/{m['batch']['id']}/pairs/{pr['pair_id']}", json={"manual": {hs: {"value": "Built to\nlast years"}}}))
         run = ok(client.post(f"/api/batches/{m['batch']['id']}/submit", json={"idempotency_key": "ui-run"}))
+        # a long unbroken name in the batch and run lists: narrow pages must wrap or scroll it, whatever the fonts
+        long = ok(client.post("/api/batches", json={"name": "Northern_region_spring_furniture_launch_for_every_retail_partner",
+                                                    "template_versions": [{"version_id": base["version"]["id"]}], "product_ids": [p["id"]]}))
+        ok(client.patch(f"/api/batches/{long['batch']['id']}/pairs/{long['pairs'][0]['pair_id']}", json={"manual": {hs: {"value": "Built to\nlast years"}}}))
+        lr = ok(client.post(f"/api/batches/{long['batch']['id']}/submit", json={"idempotency_key": "ui-long-name"}))
+        for o in ok(client.get(f"/api/runs/{lr['run_id']}"))["outputs"]:
+            ok(client.post(f"/api/outputs/{o['id']}/cancel"))
         S.drain()
         cls.ids = {"template": base["id"], "copy": cls.copy["id"], "batch": m["batch"]["id"], "run": run["run_id"]}
         cls.start()

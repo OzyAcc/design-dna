@@ -152,7 +152,7 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 ul.tight { margin: 4px 0; padding-left: 18px; } ul.tight li { margin: 2px 0; }
 table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.data th { text-align: left; font: 11px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); padding: 8px; border-bottom: 1px solid var(--rule); }
-table.data td { padding: 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.data td { padding: 8px; border-bottom: 1px solid var(--rule); vertical-align: top; overflow-wrap: anywhere; } /* a long name wraps instead of widening the page */
 .kv { display: grid; grid-template-columns: 150px 1fr; gap: 6px 14px; font-size: 14px; }
 .kv dt { color: var(--ink-3); font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 3px; }
 .kv dd { margin: 0; }
