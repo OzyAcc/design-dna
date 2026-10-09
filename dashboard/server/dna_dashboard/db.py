@@ -206,7 +206,7 @@ CREATE TABLE provider_requests (
   provider TEXT NOT NULL,
   operation TEXT NOT NULL,
   model TEXT,
-  status TEXT NOT NULL,                             -- sending | received | failed | unknown
+  status TEXT NOT NULL,                             -- sending | received | stored | failed | unknown
   request_id TEXT,
   detail TEXT,
   started_at TEXT NOT NULL,
@@ -223,6 +223,15 @@ CREATE TABLE migrations (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+"""),
+    # 2: provider results are checkpointed durably the moment they arrive (status `stored`), keyed by the job and the
+    # logical call, so a recovered job resumes from the stored result instead of calling the paid provider again;
+    # a creative output's text policy (overlay | in_image | none) can be chosen per output
+    (2, """
+ALTER TABLE provider_requests ADD COLUMN call_key TEXT;
+ALTER TABLE provider_requests ADD COLUMN checkpoint TEXT;
+CREATE INDEX provider_requests_job_call ON provider_requests (job_id, call_key);
+ALTER TABLE batch_pairs ADD COLUMN creative_text TEXT
 """),
 ]
 
@@ -299,7 +308,7 @@ def loads(v, default=None):
 JSON_COLUMNS = {"metadata", "provenance", "tags", "passport", "draft", "summary", "acceptance", "detail_asset_ids", "facts",
                 "template_versions", "product_ids", "defaults", "product_overrides", "pair_overrides", "manual", "ai_drafts",
                 "preview", "version_check", "snapshot", "inputs", "files", "checks", "limitations", "input", "result", "error",
-                "data", "detail"}
+                "data", "detail", "checkpoint"}
 
 
 def row(r: sqlite3.Row | None) -> dict | None:

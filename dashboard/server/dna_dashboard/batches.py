@@ -20,6 +20,12 @@ from .errors import AppError, conflict, not_found
 IMAGE_ROLES = ("product", "hero", "photo", "image", "packshot", "main")
 MODES = ("adapt", "creative", "creative_slot")
 LANGS = ("en", "ar")
+# What a creative (new artwork) output does with the reviewed copy, chosen before submission and frozen with it:
+#   overlay  - the image model makes text-free artwork; the template's own text (the approved copy) and shapes are
+#              rendered over it as live text by the engine and verified
+#   in_image - the image model is asked to draw the approved copy; raster text, checked by a person before approval
+#   none     - imagery only; the copy is not used (disclosed before submission)
+CREATIVE_TEXT = ("overlay", "in_image", "none")
 
 
 def pair_id(batch_id, product_id, template_id, vi=0) -> str:
@@ -80,6 +86,8 @@ def update(conn, bid, base_revision: int, changes: dict) -> dict:
                     raise AppError(f"unknown mode {v!r}", "bad_mode")
                 if k == "language" and v not in LANGS:
                     raise AppError(f"unsupported language {v!r}", "bad_language")
+                if k == "creative_text" and v not in CREATIVE_TEXT:
+                    raise AppError(f"unknown creative text policy {v!r}", "bad_creative_text")
                 if k == "copy":
                     d["copy"] = _merge(d.get("copy") or {}, v or {})
                 else:
@@ -204,6 +212,10 @@ def set_pair(conn, bid, pid, changes: dict) -> dict:
             upd["language"] = changes["language"]
         if "instructions" in changes:
             upd["instructions"] = changes["instructions"]
+        if "creative_text" in changes:
+            if changes["creative_text"] not in (None,) + CREATIVE_TEXT:
+                raise AppError(f"unknown creative text policy {changes['creative_text']!r}", "bad_creative_text")
+            upd["creative_text"] = changes["creative_text"]
         if "manual" in changes:
             man = dict(p["manual"] or {})
             for slot, v in (changes["manual"] or {}).items():
@@ -309,6 +321,8 @@ def resolve(conn, b: dict, p: dict, providers_ok: dict | None = None) -> dict:
     po_prod = (b.get("product_overrides") or {}).get(p["product_id"]) or {}
     mode = p.get("mode") or defaults.get("mode") or "adapt"
     lang = p.get("language") or defaults.get("language") or "en"
+    creative_text = (p.get("creative_text") or defaults.get("creative_text") or "overlay") if mode == "creative" else None
+    copy_unused = creative_text == "none"
     tdef = (s.get("defaults") or {}).get("copy") or {}
     problems, warnings, slots = [], [], []
     for sl in s["slots"]:
@@ -338,7 +352,8 @@ def resolve(conn, b: dict, p: dict, providers_ok: dict | None = None) -> dict:
                 entry["problems"].append("no copy supplied for a required slot (the reference's text is design evidence, not product copy)")
             else:
                 entry["hidden"] = True
-                warnings.append(f"{sl['role']}: no copy supplied; the slot will be hidden")
+                if not copy_unused:
+                    warnings.append(f"{sl['role']}: no copy supplied; the slot will be hidden")
         elif val == "":
             if sl["required"]:
                 entry["problems"].append("a required slot cannot be empty")
@@ -353,6 +368,8 @@ def resolve(conn, b: dict, p: dict, providers_ok: dict | None = None) -> dict:
                 entry["problems"].append(f"{val.count(chr(10)) + 1} lines; the slot allows {lim['max_lines']} (rewrite, or edit a template copy)")
         if man is not None and man.get("source") == "ai" and not approved:
             entry["problems"].append("AI draft not approved yet: review it, edit or approve")
+        if copy_unused:  # imagery only: this copy is not used, so it cannot block the output
+            entry.update(unused=True, problems=[])
         problems += [f"{sl['role']}: {x}" for x in entry["problems"]]
         slots.append(entry)
     image_slots = [x for x in s["slots"] if x["type"] == "image"]
@@ -364,7 +381,7 @@ def resolve(conn, b: dict, p: dict, providers_ok: dict | None = None) -> dict:
         if primary.get("locked"):
             problems.append(f"{primary['role']}: the image slot is locked by the template")
         for x in image_slots:
-            if x is not primary:
+            if x is not primary and mode in ("adapt", "creative_slot"):  # creative modes replace every image layer
                 warnings.append(f"{x['role']}: keeps the reference image (design evidence from the original)")
     logos = [x for x in s["slots"] if x["type"] == "logo"]
     if logos:
@@ -383,9 +400,23 @@ def resolve(conn, b: dict, p: dict, providers_ok: dict | None = None) -> dict:
             problems.append("no image generation provider is configured (Settings)")
         if mode == "creative_slot" and not primary:
             problems.append("creative slot imagery needs a template with an image slot")
-        warnings.append("creative generation produces a new image: no pixel preservation or editability is claimed")
+        if creative_text == "overlay":
+            if not any(n["type"] == "background" for n in ts.version_scene(v)["nodes"]):
+                problems.append("live text over generated artwork needs a template with a background layer: choose text drawn by the "
+                                "image model, or imagery only")
+            warnings.append("the artwork is generated (no pixel preservation is claimed for it); the template's text, with this "
+                            "output's approved copy, and its shapes are rendered over it as live, checked layers")
+            if image_slots:
+                warnings.append("the template's photo areas are replaced by the generated artwork")
+        elif creative_text == "in_image":
+            warnings.append("the image model draws the approved copy into the picture: raster text, not live or editable, and it may be "
+                            "misspelled; you confirm it matches before approving")
+        elif creative_text == "none":
+            warnings.append("imagery only: this output's copy is not used and no text is requested (chosen before submission)")
+        if creative_text is None:
+            warnings.append("creative generation produces a new image: no pixel preservation or editability is claimed")
     font = None
-    if lang == "ar":
+    if lang == "ar" and not copy_unused and creative_text != "in_image":  # the font renders live text only
         fsha = defaults.get("arabic_font")
         if not fsha:
             problems.append("Arabic needs a font that covers its glyphs: choose one in the batch settings")
@@ -399,23 +430,24 @@ def resolve(conn, b: dict, p: dict, providers_ok: dict | None = None) -> dict:
                 for e in slots:
                     if e["value"] and not e["hidden"] and not el.covers(font["path"], e["value"]):
                         problems.append(f"{e['role']}: {font['names'].get('full')} lacks glyphs for this text")
-    if p.get("version_check", {}) and (p.get("version_check") or {}).get("needs_confirmation"):
+    if not copy_unused and (p.get("version_check") or {}).get("needs_confirmation"):
         problems.append("the selected template version changed and some slots differ: confirm how to map this output's copy")
     instr = [x for x in ((s.get("defaults") or {}).get("instructions"), defaults.get("instructions"), po_prod.get("instructions"),
                          prod.get("instructions"), p.get("instructions")) if x]
-    resolved = {"pair_id": p["id"], "mode": mode, "language": lang, "slots": slots, "image": image,
+    resolved = {"pair_id": p["id"], "mode": mode, "language": lang, "creative_text": creative_text, "slots": slots, "image": image,
                 "logos_hidden": [x["node"] for x in logos], "instructions": instr, "arabic_font": font and {"sha256": font["sha256"], "names": font["names"]},
                 "template": {"id": t["id"], "name": t["name"], "version_id": v["id"], "number": v["number"], "bundle_sha256": v["bundle_sha256"],
                              "readiness": v["readiness"], "canvas": s["canvas"]},
                 "product": {"id": prod["id"], "name": prod["name"], "description": prod["description"], "facts": prod["facts"],
                             "primary_asset_id": prod["primary_asset_id"], "detail_asset_ids": prod["detail_asset_ids"]}}
-    resolved["inputs_hash"] = hashlib.sha256(json.dumps({k: resolved[k] for k in ("mode", "language", "slots", "image", "arabic_font", "template")},
+    resolved["inputs_hash"] = hashlib.sha256(json.dumps({k: resolved[k] for k in ("mode", "language", "creative_text", "slots", "image",
+                                                                                 "arabic_font", "template")},
                                                         sort_keys=True, default=str).encode()).hexdigest()[:16]
     prev = p.get("preview") or {}
     fit = prev.get("fit") if prev.get("inputs_hash") == resolved["inputs_hash"] else None
     resolved["fit"] = fit
     resolved["preview"] = prev if prev.get("inputs_hash") == resolved["inputs_hash"] else ({"stale": True} if prev else None)
-    if mode == "adapt" and fit and fit.get("status") == "overflow":
+    if (mode == "adapt" or creative_text == "overlay") and fit and fit.get("status") == "overflow":
         problems.append("the copy does not fit: " + "; ".join(f"{k}: {x}" for k, x in (fit.get("overflow") or {}).items())[:300])
     resolved["problems"], resolved["warnings"] = problems, sorted(set(warnings))
     resolved["status"] = "error" if problems else ("warning" if warnings else "ready")
@@ -449,7 +481,7 @@ def matrix(conn, bid) -> dict:
         rows.append(dict(r, included=bool(p["included"]), variant_index=p["variant_index"], product_id=p["product_id"],
                          template_id=p["template_id"], template_version_id=p["template_version_id"],
                          version_check=p.get("version_check"), pair_mode=p.get("mode"), pair_language=p.get("language"),
-                         pair_instructions=p.get("instructions")))
+                         pair_creative_text=p.get("creative_text"), pair_instructions=p.get("instructions")))
     inc = [r for r in rows if r["included"]]
     return {"batch": public(b), "pairs": rows, "providers": pv,
             "counts": {"proposed": len(rows), "included": len(inc), "excluded": len(rows) - len(inc),
@@ -462,28 +494,67 @@ def public(b: dict) -> dict:
                                   "run_id", "created_at", "updated_at")}
 
 
+SLOT_CONTENT = ("slot_id", "value", "hidden", "unused", "approved", "locked")
+PRODUCT_CONTENT = ("id", "name", "description", "facts", "primary_asset_id", "detail_asset_ids")
+
+
+def fingerprint(included: list[dict]) -> str:
+    """What a submission is: everything frozen into its outputs that changes what they become (copy, mode, text
+    policy, language, images, font, template version, product content and instructions). A submission key always
+    means this content and nothing else. Suggestions that are not used (AI drafts) and display names are left out."""
+    items = []
+    for r in included:
+        t, f = r.get("template") or {}, r.get("arabic_font") or {}
+        items.append({"pair_id": r["pair_id"], "mode": r.get("mode"), "language": r.get("language"), "creative_text": r.get("creative_text"),
+                      "slots": [{k: e.get(k) for k in SLOT_CONTENT} for e in r.get("slots") or []], "image": r.get("image"),
+                      "logos_hidden": r.get("logos_hidden"), "arabic_font": f.get("sha256"), "instructions": r.get("instructions"),
+                      "template": [t.get("version_id"), t.get("bundle_sha256")],
+                      "product": {k: (r.get("product") or {}).get(k) for k in PRODUCT_CONTENT}})
+    items.sort(key=lambda x: x["pair_id"])
+    return hashlib.sha256(json.dumps(items, sort_keys=True, default=str).encode()).hexdigest()[:24]
+
+
+def submission(conn, idempotency_key: str) -> dict | None:
+    """The run a submission key created, if any (lets a client recover the outcome of a request it lost)."""
+    r = db.one(conn, "SELECT id, batch_id, created_at, snapshot FROM runs WHERE idempotency_key = ?", (idempotency_key,))
+    if not r:
+        return None
+    return {"run_id": r["id"], "batch_id": r["batch_id"], "created_at": r["created_at"], "fingerprint": (r["snapshot"] or {}).get("fingerprint")}
+
+
+def _existing(conn, idempotency_key: str, fp: str):
+    prev = db.one(conn, "SELECT * FROM runs WHERE idempotency_key = ?", (idempotency_key,))
+    if not prev:
+        return None
+    if (prev["snapshot"] or {}).get("fingerprint") not in (None, fp):
+        raise conflict("this submission was already received as another run, made from content that has changed since; "
+                       "open that run, or generate again to submit the current content as a new run", "submission_changed",
+                       run_id=prev["id"])
+    return {"run_id": prev["id"], "duplicate": True}
+
+
 def submit(conn, bid, idempotency_key: str, name: str | None = None) -> dict:
+    """Freeze the included outputs and queue them, exactly once per submission key: repeating the key with the same
+    content returns the run it created; repeating it after the content changed is refused (submission_changed)."""
     from . import jobs
 
     if not idempotency_key or len(idempotency_key) > 120:
         raise AppError("an idempotency key is required to submit", "missing_idempotency_key")
-    prev = db.one(conn, "SELECT * FROM runs WHERE idempotency_key = ?", (idempotency_key,))
-    if prev:
-        return {"run_id": prev["id"], "duplicate": True}
-    m = matrix(conn, bid)
-    inc = [r for r in m["pairs"] if r["included"]]
-    if not inc:
-        raise AppError("no outputs are included", "nothing_to_generate")
-    blocked = [{"pair_id": r["pair_id"], "problems": r["problems"]} for r in inc if r["status"] == "error"]
-    if blocked:
-        raise conflict("some outputs cannot be generated yet; fix the listed problems or exclude them", "preflight_failed", blocked=blocked)
-    with db.tx(conn):
-        prev = db.one(conn, "SELECT * FROM runs WHERE idempotency_key = ?", (idempotency_key,))
+    with db.tx(conn):  # the snapshot is read under the write lock: no edit can land between preflight and freezing
+        m = matrix(conn, bid)
+        inc = [r for r in m["pairs"] if r["included"]]
+        fp = fingerprint(inc)
+        prev = _existing(conn, idempotency_key, fp)
         if prev:
-            return {"run_id": prev["id"], "duplicate": True}
+            return prev
+        if not inc:
+            raise AppError("no outputs are included", "nothing_to_generate")
+        blocked = [{"pair_id": r["pair_id"], "problems": r["problems"]} for r in inc if r["status"] == "error"]
+        if blocked:
+            raise conflict("some outputs cannot be generated yet; fix the listed problems or exclude them", "preflight_failed", blocked=blocked)
         b = get(conn, bid)
         rid = db.new_id("rn")
-        snap = {"batch": public(b), "outputs": inc, "submitted_at": db.now()}
+        snap = {"batch": public(b), "outputs": inc, "fingerprint": fp, "submitted_at": db.now()}
         db.insert(conn, "runs", {"id": rid, "batch_id": bid, "name": name or b["name"], "idempotency_key": idempotency_key, "snapshot": snap,
                                  "created_at": db.now()})
         for r in inc:
@@ -495,4 +566,4 @@ def submit(conn, bid, idempotency_key: str, name: str | None = None) -> dict:
                              batch_id=bid, priority=5)
             db.update(conn, "outputs", oid, {"job_id": j["id"]})
         db.update(conn, "batches", bid, {"run_id": rid, "updated_at": db.now()})
-    return {"run_id": rid, "duplicate": False, "outputs": len(inc)}
+    return {"run_id": rid, "duplicate": False, "outputs": len(inc), "fingerprint": fp}

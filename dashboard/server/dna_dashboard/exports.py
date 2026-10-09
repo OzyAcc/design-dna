@@ -18,14 +18,17 @@ FINAL = ("completed",)
 
 
 def output_manifest_entry(o: dict) -> dict:
+    from .handlers.output_jobs import copy_used
+
     inp = o["inputs"] or {}
+    used = copy_used(o)
     return {"output_id": o["id"], "revision": o["revision"], "pair_id": o["pair_id"], "status": o["status"], "review": o["review_state"],
-            "mode": o["mode"], "language": o["language"],
+            "mode": o["mode"], "language": o["language"], "text_policy": inp.get("creative_text") if o["mode"] == "creative" else None,
             "product": {"id": o["product_id"], "name": (inp.get("product") or {}).get("name")},
             "template": {"id": o["template_id"], "name": (inp.get("template") or {}).get("name"), "version_id": o["template_version_id"],
                          "version": (inp.get("template") or {}).get("number"), "bundle_sha256": (inp.get("template") or {}).get("bundle_sha256")},
-            "copy": [{"slot": e["slot_id"], "role": e["role"], "text": e["value"], "source": e["source"], "hidden": e["hidden"]}
-                     for e in inp.get("slots", [])],
+            "copy": [{"slot": e["slot_id"], "role": e["role"], "text": e["value"], "source": e["source"], "hidden": e["hidden"],
+                      "used": used and not e.get("unused")} for e in inp.get("slots", [])],
             "instructions": inp.get("instructions"), "checks": (o.get("checks") or {}).get("verification_status") or (o.get("checks") or {}).get("path"),
             "limitations": o.get("limitations") or [], "provenance": {k: v for k, v in (o.get("provenance") or {}).items() if k != "prompt"},
             "files": [{"name": f["name"], "kind": f["kind"], "sha256": f["sha256"], "bytes": f["bytes"],
@@ -71,7 +74,8 @@ def build_zip(conn, output_ids: list[str], include_evidence=True, label="outputs
                       f"  product: {e['product']['name']}   template: {e['template']['name']} v{e['template']['version']}   "
                       f"language: {e['language']}   mode: {e['mode']}",
                       f"  checks: {e['checks']}"]
-            lines += [f"  {c['role']}: {('(hidden)' if c['hidden'] else repr(c['text']))}  [{c['source']}]" for c in e["copy"]]
+            lines += [f"  {c['role']}: {('(hidden)' if c['hidden'] else repr(c['text']))}  [{c['source']}]"
+                      + ("" if c["used"] else "  (not used: imagery only)") for c in e["copy"]]
             lines += [f"  limitation: {x}" for x in e["limitations"]]
             lines += [f"  file: {p}" for p in e["archive_paths"]] + [""]
         z.writestr("MANIFEST.txt", "\n".join(lines))

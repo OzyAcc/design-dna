@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 
 from . import db
-from .errors import AppError
+from .errors import AppError, conflict
 
 TERMINAL = ("completed", "needs_review", "failed", "cancelled")
 
@@ -103,22 +103,33 @@ def request_cancel(conn, job_id) -> dict:
 
 
 def recover(conn) -> list[dict]:
-    """Jobs whose worker vanished (lease expired). A job with a paid provider request in flight is NOT re-run: its outcome
-    is unknown, so it goes to needs_review and only an explicit retry can send a new request. Others are re-queued."""
+    """Jobs whose worker vanished (lease expired). A job is re-queued only if re-running it cannot repeat a paid provider
+    request: every request it made must have its result stored in an intact checkpoint (the re-run resumes from it). A
+    request still in flight, or answered but not stored, has an outcome this application cannot use, so the job goes to
+    needs_review and only an explicit, confirmed retry can send a new request."""
+    from .providers.base import checkpoint_valid
+
     out = []
     with db.tx(conn):
         stale = db.all_(conn, "SELECT * FROM jobs WHERE status = 'running' AND lease_expires < ?", (time.time(),))
         for j in stale:
-            inflight = db.all_(conn, "SELECT * FROM provider_requests WHERE job_id = ? AND status = 'sending'", (j["id"],))
-            for p in inflight:
-                db.update(conn, "provider_requests", p["id"], {"status": "unknown", "finished_at": db.now(),
-                                                               "detail": {"note": "worker stopped while this request was in flight"}})
-            if inflight:
+            reqs = db.all_(conn, "SELECT * FROM provider_requests WHERE job_id = ?", (j["id"],))
+            for p in reqs:
+                if p["status"] == "sending":
+                    db.update(conn, "provider_requests", p["id"], {"status": "unknown", "finished_at": db.now(),
+                                                                   "detail": {"note": "worker stopped while this request was in flight"}})
+                    p["status"] = "unknown"
+            unusable = [p for p in reqs if p["status"] in ("unknown", "received")
+                        or (p["status"] == "stored" and not checkpoint_valid(p.get("checkpoint")))]
+            if unusable:
+                st = {p["status"] for p in unusable}
+                msg = ("the worker stopped while a paid provider request was in flight; its outcome is unknown, " if "unknown" in st
+                       else "the worker stopped after a paid provider request was answered but before its result was stored; "
+                       if "received" in st else "the stored result of a paid provider request is missing or damaged; ")
                 conn.execute("UPDATE jobs SET status = 'needs_review', finished_at = ?, lease_owner = NULL, error = ? WHERE id = ?",
-                             (db.now(), db.dumps({"kind": "interrupted", "message": "the worker stopped while a paid provider request was "
-                                                  "in flight; its outcome is unknown, so it was not resent. Retry explicitly to send a new request.",
-                                                  "provider_requests": [p["id"] for p in inflight]}), j["id"]))
-                event(conn, j["id"], "interrupted with a provider request in flight: not resent", stage="needs_review", level="warning")
+                             (db.now(), db.dumps({"kind": "interrupted", "message": msg + "so it was not sent again. Retry explicitly to "
+                                                  "send a new request.", "provider_requests": [p["id"] for p in unusable]}), j["id"]))
+                event(conn, j["id"], "interrupted with a provider result that cannot be used: not resent", stage="needs_review", level="warning")
                 out.append({"job": j["id"], "action": "needs_review"})
             elif j["cancel_requested"]:
                 conn.execute("UPDATE jobs SET status = 'cancelled', finished_at = ?, lease_owner = NULL WHERE id = ?", (db.now(), j["id"]))
@@ -130,12 +141,42 @@ def recover(conn) -> list[dict]:
                 event(conn, j["id"], "failed after repeated worker interruptions", stage="failed", level="error")
                 out.append({"job": j["id"], "action": "failed"})
             else:
+                stored = sum(1 for p in reqs if p["status"] == "stored")
                 conn.execute("UPDATE jobs SET status = 'queued', lease_owner = NULL, lease_expires = NULL WHERE id = ?", (j["id"],))
-                event(conn, j["id"], "re-queued after the worker stopped (no provider request was in flight)", stage="queued", level="warning")
+                event(conn, j["id"], "re-queued after the worker stopped" + (f" (resumes from {stored} stored provider result(s); nothing is "
+                                                                             "requested again)" if stored else " (no provider request was made)"),
+                      stage="queued", level="warning")
                 out.append({"job": j["id"], "action": "requeued"})
     for o in out:
         o["record"] = get(conn, o["job"])
     return out
+
+
+UNSETTLED = ("sending", "unknown", "received", "stored")
+
+
+def guard_paid_retry(conn, job: dict | None, confirmed: bool, delivered: bool | None = None) -> None:
+    """Before an explicit retry: if the earlier attempt's provider request may have been billed (in flight or unknown,
+    answered but not stored, or stored but never delivered), sending a new one needs `confirm_new_paid_request`.
+    `delivered` says whether that attempt's result reached the user (default: its job completed)."""
+    if not job or confirmed:
+        return
+    if delivered is None:
+        delivered = job["status"] == "completed"
+    reqs = db.all_(conn, "SELECT * FROM provider_requests WHERE job_id = ?", (job["id"],))
+    # answered or stored: billed, and lost only if the attempt did not deliver (a completed output from before results
+    # were stored has `received` requests)
+    paid = [u for u in reqs if u["status"] in ("sending", "unknown") or (u["status"] in ("received", "stored") and not delivered)]
+    if paid:
+        raise conflict("the previous attempt already reached the provider (its request may have been billed) and its result was not "
+                       "delivered. Confirm to send a new paid request.", "confirm_paid_retry",
+                       provider_requests=[{k: u[k] for k in ("id", "provider", "operation", "status", "request_id")} for u in paid])
+
+
+def latest(conn, kind: str, **scope) -> dict | None:
+    (col, val), = scope.items()
+    assert col in ("template_id", "batch_id")
+    return db.one(conn, f"SELECT * FROM jobs WHERE kind = ? AND {col} = ? ORDER BY created_at DESC, rowid DESC LIMIT 1", (kind, val))
 
 
 def public(j: dict) -> dict:

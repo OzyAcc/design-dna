@@ -111,9 +111,10 @@ def preview(bid: str, pid: str, conn=Depends(get_conn)):
     b = batches.get(conn, bid)
     p = batches.get_pair(conn, bid, pid)
     r = batches.resolve(conn, b, p)
-    if r["mode"] == "creative":
-        raise AppError("creative generation has no deterministic preview; its result is reviewed after generation", "no_preview")
-    if r.get("image") and not r["image"].get("asset_id"):
+    if r["mode"] == "creative" and r.get("creative_text") != "overlay":
+        raise AppError("this output's text is not rendered by the template (text drawn by the image model, or imagery only): there is "
+                       "no fit to check; the image is reviewed after generation", "no_preview")
+    if r["mode"] != "creative" and r.get("image") and not r["image"].get("asset_id"):
         raise AppError("the product has no primary image", "no_image")
     j = jobs.enqueue(conn, "pair.preview", {"batch_id": bid, "pair_id": pid, "inputs_hash": r["inputs_hash"]}, priority=2,
                      idempotency_key=f"preview:{pid}:{r['inputs_hash']}:{db.now()[:16]}", batch_id=bid)
@@ -132,6 +133,7 @@ def preview_png(bid: str, pid: str, conn=Depends(get_conn)) -> FileResponse:
 class DraftReq(BaseModel):
     pair_ids: list[str]
     slot_ids: Optional[list[str]] = None
+    confirm_new_paid_request: bool = False
 
 
 @router.post("/batches/{bid}/draft-copy")
@@ -143,6 +145,7 @@ def draft_copy(bid: str, body: DraftReq, conn=Depends(get_conn)):
         raise AppError("choose the outputs to draft copy for", "nothing_selected")
     for pid in body.pair_ids:
         batches.get_pair(conn, bid, pid)
+    jobs.guard_paid_retry(conn, jobs.latest(conn, "batch.draft_copy", batch_id=bid), body.confirm_new_paid_request)
     return jobs.public(jobs.enqueue(conn, "batch.draft_copy", {"batch_id": bid, "pair_ids": body.pair_ids, "slot_ids": body.slot_ids},
                                     priority=3, batch_id=bid))
 
@@ -155,3 +158,12 @@ class SubmitReq(BaseModel):
 @router.post("/batches/{bid}/submit")
 def submit(bid: str, body: SubmitReq, conn=Depends(get_conn)):
     return batches.submit(conn, bid, body.idempotency_key, body.name)
+
+
+@router.get("/submissions/{key}")
+def submission(key: str, conn=Depends(get_conn)):
+    """Whether a submission key already created a run: a client that lost the response asks before trying again."""
+    r = batches.submission(conn, key)
+    if not r:
+        raise AppError("no run was created with this submission key", "not_submitted", 404)
+    return r

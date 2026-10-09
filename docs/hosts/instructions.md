@@ -13,7 +13,7 @@ Method: instruction kit (fallback) — not native; a labelled fallback. Capabili
 3. Attach the files in knowledge/ where the assistant accepts reference files.
 4. Expect labelled estimates, not measurements: see the capability table.
 
-Package: [design-dna-instructions-kit.zip](https://github.com/OzyAcc/design-dna/releases/latest/download/design-dna-instructions-kit.zip) (or `python install.py package --target instructions-kit`).
+Package: [design-dna-instructions-kit.zip](https://github.com/OzyAcc/design-dna/releases/latest/download/design-dna-instructions-kit.zip) (or `python install.py package --target instructions-kit`). It is small by design, roughly 40 KB of instructions and references; it runs no code. A file of a few bytes is a failed download.
 
 ## Prerequisites
 

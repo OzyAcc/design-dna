@@ -11,7 +11,7 @@ from .. import db, engine
 from .. import enginelib as el
 from .. import templates_svc as ts
 from ..errors import AppError
-from ..providers import for_capability, tracked
+from ..providers import for_capability, provider_call
 from ..scan_build import Builder
 from ..worker import handler
 
@@ -38,8 +38,8 @@ def analyze(ctx):
     brief = {k: (p.get(k) or {}).get("value") for k in ts.PASSPORT_KEYS if (p.get(k) or {}).get("status") in ("user_supplied", "user_confirmed")}
     prov = for_capability("analysis", ctx.input.get("provider"))
     ctx.stage("provider", f"asking {prov.label} for element proposals (a paid request)")
-    with tracked(prov.name, "analysis", getattr(prov, "model", None), ctx.job["id"]) as tr:
-        data, meta = prov.analyze(png, brief, tr)
+    data, meta = provider_call(ctx.job["id"], "analysis", prov.name, "analysis", getattr(prov, "model", None),
+                               lambda tr: prov.analyze(png, brief, tr), "json")
     ctx.stage("proposals", f"{len(data.get('elements', []))} element proposals received")
     t = _tpl(ctx)
     d = t["draft"] or {}

@@ -24,7 +24,7 @@ Method: upload a zip. Capability: **Hosted code sandbox**. The scripts run in th
 4. Enterprise and Edu only: a workspace admin enables Skills first, under Permissions & Roles in the admin dashboard.
 5. Start a chat, attach a reference image and ask: Scan this design with Design DNA and save it as "Spring Launch".
 
-Package: [design-dna-chatgpt-skill.zip](https://github.com/OzyAcc/design-dna/releases/latest/download/design-dna-chatgpt-skill.zip) (or `python install.py package --target chatgpt-skill`).
+Package: [design-dna-chatgpt-skill.zip](https://github.com/OzyAcc/design-dna/releases/latest/download/design-dna-chatgpt-skill.zip) (or `python install.py package --target chatgpt-skill`). It is small by design, roughly 130 KB: SKILL.md, the engine's Python scripts, references and schemas. Tests and fonts are not included (you supply the fonts a design uses). A file of a few bytes is a failed download.
 
 Limits: Not offered on Free, Plus or Pro; use the instruction kit there.
 
@@ -37,7 +37,7 @@ Method: instruction kit (fallback) — not native; a labelled fallback. Capabili
 3. Custom GPT: paste INSTRUCTIONS.md into Instructions (it stays under 8,000 characters) and upload the files in knowledge/ as Knowledge.
 4. The assistant must label every answer as instruction-only: nothing is measured, rendered or verified.
 
-Package: [design-dna-instructions-kit.zip](https://github.com/OzyAcc/design-dna/releases/latest/download/design-dna-instructions-kit.zip) (or `python install.py package --target instructions-kit`).
+Package: [design-dna-instructions-kit.zip](https://github.com/OzyAcc/design-dna/releases/latest/download/design-dna-instructions-kit.zip) (or `python install.py package --target instructions-kit`). It is small by design, roughly 40 KB of instructions and references; it runs no code. A file of a few bytes is a failed download.
 
 Limits: A fallback, not a skill. Running the engine's Python by hand in ChatGPT's data analysis tool is possible in principle but not supported or tested.
 

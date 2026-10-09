@@ -133,6 +133,7 @@ def update_meta(tid: str, body: MetaReq, conn=Depends(get_conn)):
 
 class AnalyzeReq(BaseModel):
     provider: Optional[str] = None
+    confirm_new_paid_request: bool = False
 
 
 @router.post("/templates/{tid}/analyze")
@@ -141,6 +142,7 @@ def analyze(tid: str, body: AnalyzeReq, conn=Depends(get_conn)):
 
     t = ts.get(conn, tid)
     for_capability("analysis", body.provider)  # fail fast with the setup path when nothing is configured
+    jobs.guard_paid_retry(conn, jobs.latest(conn, "template.analyze", template_id=tid), body.confirm_new_paid_request)
     return _job(conn, "template.analyze", t, {"provider": body.provider})
 
 

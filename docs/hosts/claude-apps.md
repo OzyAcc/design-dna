@@ -13,7 +13,7 @@ Method: upload a zip. Capability: **Hosted code sandbox**. The scripts run in th
 3. Choose design-dna-claude-skill.zip. It holds one top-level folder, reverse-design/.
 4. Team and Enterprise owners can provision the skill for the whole organization instead.
 
-Package: [design-dna-claude-skill.zip](https://github.com/OzyAcc/design-dna/releases/latest/download/design-dna-claude-skill.zip) (or `python install.py package --target claude-skill`).
+Package: [design-dna-claude-skill.zip](https://github.com/OzyAcc/design-dna/releases/latest/download/design-dna-claude-skill.zip) (or `python install.py package --target claude-skill`). It is small by design, roughly 130 KB: SKILL.md, the engine's Python scripts, references and schemas. Tests and fonts are not included (you supply the fonts a design uses). A file of a few bytes is a failed download.
 
 ## Prerequisites
 

@@ -126,6 +126,23 @@ def op_preview(r):
             "warnings": res["warnings"], "changes": [{k: c.get(k) for k in ("path", "kind", "why")} for c in changes]}
 
 
+def op_pin_check(r):
+    """Would rendering this variant here match the template's pinned renderer? Nothing is rendered (a browser is
+    launched only to read its version). Used before a paid request whose result the engine must then render."""
+    from apply_patch import load_variant
+    from common import read_json, template_dir
+    from render_static import current_environment
+    from renderer_env import compare_pin, pin_of, requested_channel
+
+    tdir = template_dir(r["engine_id"])
+    scene = load_variant(r["engine_id"], r["variant"])[2] if r.get("variant") else read_json(tdir / "scene.json")
+    pin = pin_of(scene, tdir)
+    if not pin:
+        return {"pinned": False, "hard": [], "soft": []}
+    d = compare_pin(pin, current_environment(scene, tdir, requested_channel(pin)))
+    return {"pinned": True, "hard": d["hard"], "soft": d["soft"], "pinned_at": pin.get("pinned_at")}
+
+
 def op_render_scene(r):
     from common import template_dir
     from render_static import render

@@ -100,7 +100,7 @@ export type Product = {
 export type ResolvedSlot = {
   slot_id: string; role: string; node: string; value: string | null; source: string | null; approved: boolean; required: boolean;
   locked: string[]; limits: Record<string, any>; template_text?: string | null; ai_draft?: { value: string; note: string; mock?: boolean } | null;
-  hidden: boolean; problems: string[];
+  hidden: boolean; problems: string[]; unused?: boolean;
 };
 export type Pair = {
   pair_id: string; status: "ready" | "warning" | "error"; problems: string[]; warnings: string[]; included: boolean; variant_index: number;
@@ -109,7 +109,7 @@ export type Pair = {
   template: { id: string; name: string; version_id: string; number: number; readiness: string; canvas: { width: number; height: number } };
   product: { id: string; name: string; description: string; facts: string[]; primary_asset_id?: string };
   fit: any; preview: any; version_check?: any; pair_mode?: string | null; pair_language?: string | null; pair_instructions?: string | null;
-  inputs_hash: string;
+  inputs_hash: string; creative_text?: "overlay" | "in_image" | "none" | null; pair_creative_text?: string | null;
 };
 export type Batch = {
   id: string; name: string; status: string; revision: number; template_versions: { template_id: string; version_id: string }[];
@@ -136,4 +136,8 @@ export const READINESS: Record<string, string> = {
 };
 export const MODES: Record<string, string> = {
   adapt: "Editable template adaptation", creative: "Creative reference generation", creative_slot: "Generated photo in the template",
+};
+// What a creative (new artwork) output does with the approved copy: chosen before submission and frozen with it.
+export const CREATIVE_TEXT: Record<string, string> = {
+  overlay: "Live text over the artwork", in_image: "Text drawn by the image model", none: "Imagery only (copy not used)",
 };
